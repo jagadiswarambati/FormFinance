@@ -15,7 +15,7 @@ dist/
 build/
 
 *.log
-storage/
+/storage/
 
 secrets/
 firebase-admin.json
