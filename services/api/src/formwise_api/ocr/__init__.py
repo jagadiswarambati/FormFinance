@@ -1,0 +1,1 @@
+"""OCR job API domain."""

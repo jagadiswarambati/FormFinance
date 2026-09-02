@@ -1,0 +1,9 @@
+from typing import Protocol
+
+from formwise_api.ai_provider.models import AIProviderRequest, AIProviderResult
+
+
+class AIProvider(Protocol):
+    def provider_name(self) -> str: ...
+    async def health_check(self) -> bool: ...
+    async def generate_response(self, request: AIProviderRequest) -> AIProviderResult: ...

@@ -1,0 +1,22 @@
+{
+  "name": "formwise-ai",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "npm@11.12.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@formwise/web && npm run build --workspace=@formwise/ai-provider && npm run build --workspace=@formwise/contracts && npm run build --workspace=@formwise/document-core && npm run build --workspace=@formwise/policy",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "next": "15.5.2",
+    "prettier": "3.6.2"
+  }
+}

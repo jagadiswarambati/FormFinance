@@ -1,0 +1,60 @@
+[project]
+name = "formwise-worker"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+dependencies = [
+    "pydantic-settings>=2.10,<3",
+    "structlog>=25.4,<26",
+    "firebase-admin>=7.1,<8",
+    "paddleocr>=3.0,<4",
+    "pymupdf>=1.26,<2",
+    "pillow>=11,<12",
+    "formwise-document-core",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.17,<2",
+    "pytest>=8.4,<9",
+    "ruff>=0.12,<1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+ignore = [
+    "E501",    # Line length
+    "BLE001",  # Allow top-level exception handlers
+    "TRY004",  # Allow ValueError where appropriate
+    "UP047",   # Don't require PEP 695 generic syntax
+    "B008",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src"]
+mypy_path = ["packages/document-core/python/src"]
+
+[[tool.mypy.overrides]]
+# External libraries without typeshed/py.typed markers.
+module = ["firebase_admin", "firebase_admin.*", "paddleocr", "paddleocr.*", "fitz", "fitz.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# In-workspace packages whose internal type errors should be ignored during worker check.
+module = ["formwise_document_core", "formwise_document_core.*"]
+ignore_errors = true
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv.sources]
+formwise-document-core = { workspace = true }

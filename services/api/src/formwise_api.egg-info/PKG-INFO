@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: formwise-api
+Version: 0.1.0
+Requires-Python: >=3.13
+Requires-Dist: fastapi<1,>=0.116
+Requires-Dist: uvicorn[standard]<1,>=0.35
+Requires-Dist: pydantic-settings<3,>=2.10
+Requires-Dist: structlog<26,>=25.4
+Requires-Dist: firebase-admin<8,>=7.1
+Requires-Dist: httpx<1,>=0.28
+Requires-Dist: formwise-document-core
+Requires-Dist: formwise-worker
+Provides-Extra: dev
+Requires-Dist: mypy<2,>=1.17; extra == "dev"
+Requires-Dist: pytest<9,>=8.4; extra == "dev"
+Requires-Dist: ruff<1,>=0.12; extra == "dev"
+Requires-Dist: httpx<1,>=0.28; extra == "dev"

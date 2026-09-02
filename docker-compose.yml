@@ -1,0 +1,50 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+    ports: ['3000:3000']
+    environment: { NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1 }
+    depends_on: [api]
+  api:
+    build: { context: ., dockerfile: services/api/Dockerfile }
+    ports: ['8000:8000']
+    env_file: .env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - upload-artifacts:/app/storage/uploads
+      - quarantine-artifacts:/app/storage/quarantine
+      - ocr-artifacts:/app/storage/ocr
+      - privacy-artifacts:/app/storage/privacy
+      - render-artifacts:/app/storage/renders
+  worker:
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    env_file: .env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - upload-artifacts:/app/storage/uploads
+      - quarantine-artifacts:/app/storage/quarantine
+      - ocr-artifacts:/app/storage/ocr
+      - privacy-artifacts:/app/storage/privacy
+      - render-artifacts:/app/storage/renders
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ['ai']
+    volumes: [ollama-data:/root/.ollama]
+volumes:
+  ollama-data:
+  upload-artifacts:
+  quarantine-artifacts:
+  ocr-artifacts:
+  privacy-artifacts:
+  render-artifacts:

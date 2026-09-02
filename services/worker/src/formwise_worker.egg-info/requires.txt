@@ -1,0 +1,12 @@
+pydantic-settings<3,>=2.10
+structlog<26,>=25.4
+firebase-admin<8,>=7.1
+paddleocr<4,>=3.0
+pymupdf<2,>=1.26
+pillow<12,>=11
+formwise-document-core
+
+[dev]
+mypy<2,>=1.17
+pytest<9,>=8.4
+ruff<1,>=0.12
