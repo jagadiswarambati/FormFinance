@@ -1,44 +1,15 @@
-'use client';
-import { FileText, ShieldCheck, Upload } from 'lucide-react';
-import { RecentUploads } from '@/components/documents/recent-uploads';
-import { useAuth } from '@/contexts/auth-context';
-const cards = [
-  { title: 'Upload', description: 'Add a document', icon: Upload },
-  { title: 'My Forms', description: 'Coming soon', icon: FileText },
-  { title: 'Privacy Status', description: 'Coming soon', icon: ShieldCheck },
-];
+import Link from 'next/link';
+import { ArrowRight, CircleAlert, CircleCheck, FileCheck2, WalletCards } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 export default function AppHomePage() {
-  const { profile } = useAuth();
-  const name = profile?.displayName ?? 'there';
   return (
-    <section className="mx-auto max-w-6xl">
-      <div className="flex items-center gap-4">
-        <div className="grid h-14 w-14 place-items-center rounded-full bg-sky-100 text-lg font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-200">
-          {name.slice(0, 1).toUpperCase()}
-        </div>
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Welcome, {name}</h1>
-          <p className="mt-1 text-slate-600 dark:text-slate-300">{profile?.email}</p>
-        </div>
-      </div>
-      <p className="mt-8 max-w-2xl text-slate-600 dark:text-slate-300">
-        FormWise AI will guide you through eligible form fields while keeping privacy at the center
-        of every step.
-      </p>
-      <h2 className="mt-10 text-lg font-semibold">Quick Actions</h2>
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {cards.map(({ description, icon: Icon, title }) => (
-          <article
-            key={title}
-            className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"
-          >
-            <Icon className="h-5 w-5 text-sky-700 dark:text-sky-300" />
-            <h3 className="mt-5 font-semibold">{title}</h3>
-            <p className="mt-1 text-sm text-slate-500">{description}</p>
-          </article>
-        ))}
-      </div>
-      <RecentUploads />
+    <section className="mx-auto max-w-6xl space-y-8">
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">AI Finance Controller</p><h1 className="mt-3 text-3xl font-semibold tracking-tight">Operations overview</h1><p className="mt-2 text-slate-600 dark:text-slate-300">Settlement decisions, exceptions, and evidence in one control room.</p></div><div className="flex gap-3"><Button><Link href="/app/settlements"><WalletCards className="mr-2 inline h-4 w-4" />Process Settlement</Link></Button><Button variant="outline"><Link href="/app/history">View Batch Results</Link></Button></div></div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><Metric label="Settlements processed" value="50" icon={WalletCards} /><Metric label="Approved" value="20" icon={CircleCheck} tone="green" /><Metric label="Flagged" value="12" icon={CircleAlert} tone="amber" /><Metric label="Escalated" value="13" icon={CircleAlert} tone="rose" /><Metric label="Exceptions" value="25" icon={FileCheck2} tone="slate" /></div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Settlement control</h2><p className="mt-1 text-sm text-slate-500">Start with a settlement PDF and let the verification pipeline surface the decision.</p></div><Link className="inline-flex items-center text-sm font-semibold text-emerald-700 hover:text-emerald-800" href="/app/settlements">Open processor <ArrowRight className="ml-2 h-4 w-4" /></Link></div><div className="mt-6 grid gap-3 md:grid-cols-4">{['Upload document', 'Run OCR', 'Verify evidence', 'Review decision'].map((step, index) => <div className="border-l-2 border-emerald-600 pl-3" key={step}><p className="text-xs font-semibold text-emerald-700">0{index + 1}</p><p className="mt-2 text-sm font-medium">{step}</p></div>)}</div></section>
+      <p className="text-xs text-slate-500">The figures above are the deterministic 50-record benchmark, shown for demo context.</p>
     </section>
   );
 }
+
+function Metric({ label, value, icon: Icon, tone = 'slate' }: { label: string; value: string; icon: typeof WalletCards; tone?: 'green' | 'amber' | 'rose' | 'slate' }) { const colors = { green: 'text-emerald-700', amber: 'text-amber-700', rose: 'text-rose-700', slate: 'text-slate-700' }; return <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950"><Icon className={`h-5 w-5 ${colors[tone]}`} aria-hidden="true" /><p className="mt-5 text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></article>; }
