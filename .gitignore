@@ -30,3 +30,4 @@ tmp/
 temp/
 *.tmp
 **/*.egg-info/
+**/*.egg-info/
