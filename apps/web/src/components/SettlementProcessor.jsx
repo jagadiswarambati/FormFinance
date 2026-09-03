@@ -19,6 +19,15 @@ function formatAmount(value, currency = 'INR') {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value ?? 0);
 }
 
+function validatePdf(file) {
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    return 'Choose a PDF settlement or evidence document.';
+  }
+  if (file.size === 0) return 'The selected PDF is empty.';
+  if (file.size > 10 * 1024 * 1024) return 'PDFs must not exceed 10 MB.';
+  return null;
+}
+
 function decisionLabel(status) {
   return { approve: 'APPROVED', flag: 'FLAGGED', escalate: 'ESCALATED' }[status] ?? status.toUpperCase();
 }
@@ -61,11 +70,18 @@ export default function SettlementProcessor() {
 
   const selectSettlement = (event) => {
     const file = event.target.files?.[0];
-    if (file) setSettlementFile(file);
+    if (!file) return;
+    const validationError = validatePdf(file);
+    setError(validationError);
+    if (!validationError) setSettlementFile(file);
   };
 
   const uploadSettlement = async () => {
-    if (!settlementFile || !firebaseUser) return;
+    if (!settlementFile) return;
+    if (!firebaseUser) {
+      setError('Live settlement processing requires backend demo access to be configured.');
+      return;
+    }
     setError(null);
     setStatus('uploading');
     try {
@@ -80,7 +96,16 @@ export default function SettlementProcessor() {
 
   const uploadEvidence = async (event) => {
     const files = Array.from(event.target.files ?? []);
-    if (!firebaseUser || files.length === 0) return;
+    if (files.length === 0) return;
+    const invalidFile = files.map(validatePdf).find(Boolean);
+    if (invalidFile) {
+      setError(invalidFile);
+      return;
+    }
+    if (!firebaseUser) {
+      setError('Live evidence processing requires backend demo access to be configured.');
+      return;
+    }
     setError(null);
     setStatus('uploading_evidence');
     try {
@@ -97,7 +122,11 @@ export default function SettlementProcessor() {
   };
 
   const process = async () => {
-    if (!settlementDocumentId || !firebaseUser) return;
+    if (!settlementDocumentId) return;
+    if (!firebaseUser) {
+      setError('Live settlement processing requires backend demo access to be configured.');
+      return;
+    }
     setError(null);
     setResult(null);
     try {
@@ -171,12 +200,13 @@ export default function SettlementProcessor() {
       <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 dark:border-slate-700 dark:bg-slate-950">
         <UploadCloud className="h-8 w-8 text-sky-700" aria-hidden="true" /><h2 className="mt-4 font-semibold">Settlement PDF</h2>
         <input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" onChange={selectSettlement} disabled={busy} />
-        {settlementFile && <p className="mt-3 text-sm text-slate-600">{settlementFile.name}</p>}
+        {settlementFile && <div className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-600"><span className="min-w-0 truncate">{settlementFile.name} · {(settlementFile.size / 1024 / 1024).toFixed(2)} MB</span><button className="shrink-0 text-rose-700 hover:underline" onClick={() => { setSettlementFile(null); setError(null); }}>Remove</button></div>}
         {!settlementDocumentId && <Button className="mt-4" onClick={() => void uploadSettlement()} disabled={!settlementFile || busy}>{status === 'uploading' ? 'Uploading…' : 'Upload settlement'}</Button>}
         {settlementDocumentId && <p className="mt-3 text-sm text-emerald-700">Uploaded document: {settlementDocumentId}</p>}
       </div>
       {settlementDocumentId && <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Evidence PDFs</h2><input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" multiple onChange={(event) => void uploadEvidence(event)} disabled={busy} />{evidenceFiles.length > 0 && <ul className="mt-3 space-y-2 text-sm">{evidenceFiles.map((file, index) => <li className="flex items-center gap-2" key={`${file.name}-${index}`}><FileText className="h-4 w-4" aria-hidden="true" />{file.name}</li>)}</ul>}<Button className="mt-5" onClick={() => void process()} disabled={busy}>{busy ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />{status === 'processing' ? 'Processing settlement…' : 'Preparing…'}</> : 'Run settlement verification'}</Button></div>}
       {ocrStatus && <p className="text-sm text-slate-600" role="status">OCR status: {ocrStatus}</p>}
+      <ol className="grid gap-2 text-xs text-slate-500 sm:grid-cols-3"><li className={status !== 'idle' ? 'font-semibold text-emerald-700' : ''}>1. Document uploaded</li><li className={['starting_ocr', 'processing', 'results'].includes(status) ? 'font-semibold text-emerald-700' : ''}>2. OCR processing</li><li className={status === 'results' ? 'font-semibold text-emerald-700' : ''}>3. Decision generated</li></ol>
       {error && <p className="text-sm text-rose-700" role="alert">{error}</p>}
     </section>
   );
