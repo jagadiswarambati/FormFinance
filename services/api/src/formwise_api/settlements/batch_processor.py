@@ -10,19 +10,24 @@ Processes multiple settlements end-to-end:
 from typing import Optional
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
+from uuid import uuid4
 
-from formwise_api.settlements.models import Settlement, SettlementCreateRequest
+from formwise_api.settlements.models import Settlement, SettlementDeduction
 from formwise_api.settlements.document_extractor import DocumentSettlementExtractor
 from formwise_api.settlements.service import SettlementService
 from formwise_api.settlements.verification_service import SettlementVerificationService
 from formwise_api.verification.models import SettlementDecision
 from formwise_api.settlements.repository import SettlementRepository
+from formwise_api.settlements.extraction_service import SettlementExtractionService
 
 
 @dataclass
 class BatchMetrics:
     """Metrics from batch processing run."""
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    total_records: int = 0
+    processed: int = 0
+    successfully_extracted: int = 0
     total_settlements: int = 0
     total_deductions: int = 0
     
@@ -40,6 +45,12 @@ class BatchMetrics:
     # Rates
     settlement_approval_rate: float = 0.0
     deduction_verification_rate: float = 0.0
+    evidence_checked: int = 0
+    evidence_matched: int = 0
+    evidence_match_rate: float = 0.0
+    exception_count: int = 0
+    exception_rate: float = 0.0
+    extraction_success_rate: float = 0.0
     
     # AI agent usage
     agent_investigations: int = 0
@@ -77,6 +88,8 @@ class SettlementProcessResult:
     extraction_succeeded: bool = False
     verification_succeeded: bool = False
     extraction_deduction_count: int = 0
+    evidence_checked: bool = False
+    evidence_matched: bool = False
     
     def to_dict(self):
         """Convert to dictionary, handling decision object."""
@@ -102,11 +115,13 @@ class BatchSettlementProcessor:
         document_extractor: DocumentSettlementExtractor,
         verification_service: SettlementVerificationService,
         settlement_repo: SettlementRepository,
+        extraction_service: SettlementExtractionService | None = None,
     ):
         self._settlement_service = settlement_service
         self._document_extractor = document_extractor
         self._verification_service = verification_service
         self._settlement_repo = settlement_repo
+        self._extraction_service = extraction_service
     
     def process_settlements(
         self,
@@ -125,16 +140,21 @@ class BatchSettlementProcessor:
         Returns:
             (BatchMetrics, list of SettlementProcessResult)
         """
-        metrics = BatchMetrics()
+        metrics = BatchMetrics(
+            total_records=len(settlement_specs),
+            total_settlements=len(settlement_specs),
+        )
         results = []
         
         for spec in settlement_specs:
             result = self._process_single_settlement(owner_uid, spec)
             results.append(result)
             
-            # Update metrics
-            metrics.total_settlements += 1
+            metrics.processed += result.status != "error"
+            metrics.successfully_extracted += result.extraction_succeeded
             metrics.total_deductions += result.deduction_count
+            metrics.evidence_checked += result.evidence_checked
+            metrics.evidence_matched += result.evidence_matched
             
             if result.status == "approved":
                 metrics.approved_count += 1
@@ -157,6 +177,7 @@ class BatchSettlementProcessor:
             
             # Track exceptions
             if result.status in ("flagged", "escalated"):
+                metrics.exception_count += 1
                 metrics.exceptions.append({
                     "settlement_id": result.settlement_id,
                     "status": result.status,
@@ -165,17 +186,44 @@ class BatchSettlementProcessor:
                 })
         
         # Calculate rates
-        if metrics.total_settlements > 0:
-            metrics.settlement_approval_rate = (
-                metrics.approved_count / metrics.total_settlements
-            )
+        if metrics.total_records > 0:
+            metrics.settlement_approval_rate = metrics.approved_count / metrics.total_records
+            metrics.exception_rate = metrics.exception_count / metrics.total_records
+            metrics.extraction_success_rate = metrics.successfully_extracted / metrics.total_records
         
         if metrics.total_deductions > 0:
             metrics.deduction_verification_rate = (
                 metrics.verified_deductions / metrics.total_deductions
             )
-        
+        if metrics.evidence_checked > 0:
+            metrics.evidence_match_rate = metrics.evidence_matched / metrics.evidence_checked
+
         return metrics, results
+
+    def _persist_deductions(self, settlement_id: str, deduction_data: list[dict]) -> list[SettlementDeduction]:
+        if self._extraction_service:
+            deductions = self._extraction_service.extract_from_structured_data(settlement_id, deduction_data)
+            self._extraction_service.complete_extraction(settlement_id)
+            return deductions
+
+        deductions = []
+        for data in deduction_data:
+            deduction = SettlementDeduction(
+                settlement_id=settlement_id,
+                type=data["type"],
+                description=data["description"],
+                amount=float(data["amount"]),
+                reference_id=data.get("reference_id"),
+                reference_date=data.get("reference_date"),
+                extracted_with_confidence=float(data.get("confidence", 0.95)),
+            )
+            deduction.id = self._settlement_service.create_deduction(deduction)
+            deductions.append(deduction)
+        self._settlement_service.update_settlement(
+            settlement_id,
+            {"status": "processing", "deductionIds": [deduction.id for deduction in deductions]},
+        )
+        return deductions
     
     def _process_single_settlement(
         self,
@@ -183,108 +231,96 @@ class BatchSettlementProcessor:
         spec: dict,
     ) -> SettlementProcessResult:
         """Process a single settlement with OCR extraction."""
-        
+
+        settlement_id = spec.get("settlement_id") or spec.get("id")
         try:
-            # 1. Create settlement record
-            from formwise_api.settlements.repository import FirestoreSettlementDeductionRepository
-            
-            create_req = SettlementCreateRequest(
+            settlement = Settlement(
+                id=settlement_id or uuid4().hex,
+                owner_uid=owner_uid,
                 source=spec.get("source", "razorpay"),
-                settlement_date=spec.get("settlement_date"),
+                settlement_date=spec["settlement_date"],
                 gross_amount=spec.get("gross_amount", 100000.0),
                 net_amount=spec.get("net_amount", 95000.0),
                 currency=spec.get("currency", "INR"),
             )
-            settlement_id = self._settlement_service.create_settlement(
-                Settlement(
-                    owner_uid=owner_uid,
-                    source=create_req.source,
-                    settlement_date=create_req.settlement_date,
-                    gross_amount=create_req.gross_amount,
-                    net_amount=create_req.net_amount,
-                    currency=create_req.currency,
-                )
-            )
-            
-            # 2. Extract deductions from OCR text
-            ocr_text = spec.get("ocr_text", "")
-            extraction_count = 0
-            deduction_repo = None
-            
-            if ocr_text:
-                try:
-                    # Use document extractor to parse OCR text
-                    deductions = self._document_extractor._extract_deductions(ocr_text)
-                    extraction_count = len(deductions)
-                    
-                    # Get deduction repository from extraction service
-                    if hasattr(self._document_extractor, '_deduction_repo'):
-                        deduction_repo = self._document_extractor._deduction_repo
-                    
-                    # Add deductions to settlement
-                    if deduction_repo and deductions:
-                        for ded in deductions:
-                            # Set settlement_id on deduction
-                            ded.settlement_id = settlement_id
-                            deduction_repo.create(ded)
-                except Exception as e:
-                    # If extraction fails, note it but continue
-                    pass
-            
-            # 3. Run verification workflow
-            decision = self._verification_service.verify_settlement(settlement_id)
-            
-            settlement = self._settlement_service.get_settlement(settlement_id)
-            if not settlement:
+            settlement_id = self._settlement_service.create_settlement(settlement)
+
+            deduction_data = spec.get("deductions")
+            if deduction_data is None:
+                deduction_data = self._document_extractor.extract_deductions(spec.get("ocr_text", ""))
+            if not spec.get("ocr_text") and spec.get("deductions") is None:
                 return SettlementProcessResult(
                     settlement_id=settlement_id,
                     owner_uid=owner_uid,
-                    source=spec.get("source", "razorpay"),
+                    source=settlement.source,
                     status="error",
-                    error="Settlement not found after creation",
-                    extraction_succeeded=extraction_count > 0,
-                    extraction_deduction_count=extraction_count,
+                    error="No settlement extraction input provided",
                 )
-            
-            # Load deductions to get counts - need to use the extraction service repo
-            from formwise_api.authentication.firebase import get_firestore_client
-            client = get_firestore_client()
-            deduction_repo_instance = FirestoreSettlementDeductionRepository(client)
-            deductions = deduction_repo_instance.list_for_settlement(settlement_id)
-            deduction_count = len(deductions)
-            
-            # Extract verification stats from decision if available
-            verified_count = 0
-            disputed_count = 0
-            unverifiable_count = 0
-            
-            if decision and decision.verification_summary:
-                verified_count = decision.verification_summary.get("verified", 0)
-                disputed_count = decision.verification_summary.get("disputed", 0)
-                unverifiable_count = decision.verification_summary.get("unverifiable", 0)
-            
+            deductions = self._persist_deductions(settlement_id, deduction_data)
+            extraction_succeeded = bool(spec.get("ocr_text") or spec.get("deductions") is not None)
+
+            decision = self._verification_service.verify_settlement(settlement_id)
+            stored_settlement = self._settlement_service.get_settlement(settlement_id)
+            if not stored_settlement or not decision:
+                return SettlementProcessResult(
+                    settlement_id=settlement_id,
+                    owner_uid=owner_uid,
+                    source=settlement.source,
+                    status="error",
+                    error="Settlement verification did not produce a decision",
+                    deduction_count=len(deductions),
+                    extraction_succeeded=extraction_succeeded,
+                    extraction_deduction_count=len(deductions),
+                )
+
+            summary = decision.verification_summary or {}
             return SettlementProcessResult(
                 settlement_id=settlement_id,
                 owner_uid=owner_uid,
-                source=settlement.source,
-                status=settlement.status,
-                deduction_count=deduction_count,
-                verified_count=verified_count,
-                disputed_count=disputed_count,
-                unverifiable_count=unverifiable_count,
+                source=stored_settlement.source,
+                status={"approve": "approved", "flag": "flagged", "escalate": "escalated"}.get(decision.final_decision, "error"),
+                deduction_count=len(deductions),
+                verified_count=summary.get("verified", 0),
+                disputed_count=summary.get("disputed", 0),
+                unverifiable_count=summary.get("unverifiable", 0),
                 decision=decision,
-                extraction_succeeded=extraction_count > 0,
-                verification_succeeded=decision is not None,
-                extraction_deduction_count=extraction_count,
+                extraction_succeeded=extraction_succeeded,
+                verification_succeeded=True,
+                extraction_deduction_count=len(deductions),
+                evidence_checked=bool(spec.get("evidence_checked", False)),
+                evidence_matched=bool(spec.get("evidence_matched", False)),
             )
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
+
+        except Exception as error:
             return SettlementProcessResult(
-                settlement_id="error",
+                settlement_id=settlement_id or "error",
                 owner_uid=owner_uid,
                 source=spec.get("source", "razorpay"),
                 status="error",
-                error=str(e),
+                error=str(error),
             )
+
+    def _persist_deductions(self, settlement_id: str, deduction_data: list[dict]) -> list[SettlementDeduction]:
+        if self._extraction_service:
+            deductions = self._extraction_service.extract_from_structured_data(settlement_id, deduction_data)
+            self._extraction_service.complete_extraction(settlement_id)
+            return deductions
+
+        deductions = []
+        for data in deduction_data:
+            deduction = SettlementDeduction(
+                settlement_id=settlement_id,
+                type=data["type"],
+                description=data["description"],
+                amount=float(data["amount"]),
+                reference_id=data.get("reference_id"),
+                reference_date=data.get("reference_date"),
+                extracted_with_confidence=float(data.get("confidence", 0.95)),
+            )
+            deduction.id = self._settlement_service.create_deduction(deduction)
+            deductions.append(deduction)
+        self._settlement_service.update_settlement(
+            settlement_id,
+            {"status": "processing", "deductionIds": [deduction.id for deduction in deductions]},
+        )
+        return deductions

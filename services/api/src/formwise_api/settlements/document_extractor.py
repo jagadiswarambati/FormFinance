@@ -104,6 +104,10 @@ class DocumentSettlementExtractor:
         )
         
         return settlement, deductions
+
+    def extract_deductions(self, ocr_text: str) -> list[dict]:
+        """Extract normalized deduction data from OCR text for a caller to persist."""
+        return self._extract_deductions(ocr_text)
     
     def _parse_settlement_data(self, ocr_text: str) -> Optional[dict]:
         """

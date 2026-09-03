@@ -85,6 +85,7 @@ Net Payout: INR 240,500.00
         {
             "source": "razorpay",
             "settlement_date": "2026-08-22",
+
             "gross_amount": 200000.0,
             "net_amount": 148000.0,
             "currency": "INR",
@@ -259,6 +260,57 @@ Status: MULTI-GATEWAY - REQUIRES RECONCILIATION
     ]
     
     return settlements
+
+
+def get_benchmark_settlements() -> list[dict]:
+    """Return a deterministic 50-record batch with mixed verification outcomes."""
+    records = []
+    scenarios = (
+        [("valid", 20), ("mismatch", 12), ("missing_evidence", 8),
+         ("exception", 5), ("extraction_failure", 5)]
+    )
+    index = 0
+    for scenario, count in scenarios:
+        for _ in range(count):
+            index += 1
+            gross = 100000.0 + index * 1000
+            amount = 1000.0 + index
+            deductions = [{
+                "type": "fee",
+                "description": f"Benchmark fee {index}",
+                "amount": amount,
+                "reference_id": f"BENCH-{index:03d}",
+                "reference_date": f"2026-08-{(index % 28) + 1:02d}",
+                "confidence": 0.95 if scenario not in ("exception", "missing_evidence") else 0.25,
+            }]
+            net = gross - amount
+            if scenario == "mismatch":
+                deductions[0]["amount"] = gross + 100.0
+                net = 1.0
+            elif scenario == "exception":
+                deductions.append({
+                    "type": "refund",
+                    "description": f"Unresolved refund {index}",
+                    "amount": 500.0,
+                    "confidence": 0.25,
+                })
+                net -= 500.0
+            elif scenario == "extraction_failure":
+                deductions = None
+            records.append({
+                "settlement_id": f"benchmark-{index:03d}",
+                "source": ("razorpay", "stripe", "paypal")[index % 3],
+                "settlement_date": f"2026-08-{(index % 28) + 1:02d}",
+                "gross_amount": gross,
+                "net_amount": net,
+                "currency": "INR",
+                "deductions": deductions,
+                "ocr_text": "" if scenario == "extraction_failure" else "Benchmark settlement record with deterministic input.",
+                "evidence_checked": scenario in ("missing_evidence", "exception"),
+                "evidence_matched": False,
+                "_scenario": scenario,
+            })
+    return records
 
 
 if __name__ == "__main__":

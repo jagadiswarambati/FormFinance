@@ -25,7 +25,7 @@ from formwise_api.settlements.batch_processor import (
     SettlementProcessResult,
     BatchMetrics,
 )
-from formwise_api.settlements.demo_data import get_demo_settlements
+from formwise_api.settlements.demo_data import get_demo_settlements, get_benchmark_settlements
 from formwise_api.settlements.models import Settlement, SettlementDeduction
 from formwise_api.settlements.service import SettlementService
 from formwise_api.settlements.verification_service import SettlementVerificationService
@@ -161,6 +161,10 @@ def batch_processor(mock_firestore_client, settlement_service):
     
     doc_extractor = DocumentSettlementExtractor(
         settlement_repo,
+        audit_repo,
+    )
+    extraction_service = SettlementExtractionService(
+        settlement_repo,
         deduction_repo,
         audit_repo,
     )
@@ -180,6 +184,7 @@ def batch_processor(mock_firestore_client, settlement_service):
         doc_extractor,
         verification_service,
         settlement_repo,
+        extraction_service,
     )
 
 
@@ -353,6 +358,35 @@ class TestDemoEndToEndWorkflow:
         assert result_dict["settlement_id"] == "test-id"
         assert result_dict["status"] == "approved"
         assert result_dict["deduction_count"] == 2
+
+
+    def test_fifty_record_benchmark(self, batch_processor, mock_firestore_client):
+        """Process the deterministic 50-record benchmark through the batch pipeline."""
+        specs = get_benchmark_settlements()
+
+        metrics, results = batch_processor.process_settlements("benchmark-user", specs)
+
+        assert len(specs) == 50
+        assert len(results) == 50
+        assert metrics.total_records == 50
+        assert metrics.processed == 45
+        assert metrics.successfully_extracted == 45
+        assert metrics.processing_failed_count == 5
+        assert metrics.approved_count == 20
+        assert metrics.flagged_count == 12
+        assert metrics.escalated_count == 13
+        assert metrics.exception_count == 25
+        assert metrics.exception_rate == 0.5
+        assert metrics.extraction_success_rate == 0.9
+        assert metrics.evidence_checked == 13
+        assert metrics.evidence_match_rate == 0.0
+
+        stored = mock_firestore_client.data["settlementDeductions"]
+        assert len(stored) == metrics.total_deductions
+        assert all(
+            deduction["settlementId"].startswith("benchmark-")
+            for deduction in stored.values()
+        )
 
 
 class TestDemoDataQuality:
