@@ -166,6 +166,10 @@ def get_batch_processor() -> BatchSettlementProcessor:
     
     doc_extractor = DocumentSettlementExtractor(
         FirestoreSettlementRepository(client),
+        FirestoreFinanceAuditEventRepository(client),
+    )
+    extraction_service = SettlementExtractionService(
+        FirestoreSettlementRepository(client),
         FirestoreSettlementDeductionRepository(client),
         FirestoreFinanceAuditEventRepository(client),
     )
@@ -175,6 +179,7 @@ def get_batch_processor() -> BatchSettlementProcessor:
         doc_extractor,
         verification_service,
         FirestoreSettlementRepository(client),
+        extraction_service,
     )
 
 
