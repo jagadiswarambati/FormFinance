@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { Providers } from '@/components/providers';
 import './globals.css';
 export const metadata: Metadata = {
-  title: 'FormWise AI',
-  description: 'Privacy-first form assistance',
+  title: 'FORMFINANCE | AI Finance Controller',
+  description: 'Finance operations, verified automatically.',
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
