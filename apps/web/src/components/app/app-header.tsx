@@ -1,6 +1,7 @@
 'use client';
 
 import { Menu, Moon, Search, Sun } from 'lucide-react';
+import Link from 'next/link';
 import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 
@@ -30,27 +31,27 @@ export function AppHeader({
         <Menu className="h-5 w-5" />
       </Button>
       <LinkBrand />
-      <div className="mx-auto hidden max-w-md flex-1 md:block">
-        <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+      <div className="mx-auto hidden max-w-md flex-1 md:block" aria-label="Search unavailable in demo mode">
+        <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900" aria-disabled="true">
           <Search className="h-4 w-4" />
-          <span>Search coming soon</span>
+          <span>Search unavailable in demo mode</span>
         </div>
       </div>
       <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
         {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
       </Button>
-      <span className="hidden text-xs font-medium uppercase tracking-widest text-slate-400 sm:block">Demo mode</span>
+      <Link href="/" className="hidden text-xs font-medium uppercase tracking-widest text-slate-400 hover:text-emerald-700 sm:block">Exit demo</Link>
     </header>
   );
 }
 
 function LinkBrand() {
   return (
-    <div className="flex items-center gap-2">
+    <Link href="/app" className="flex items-center gap-2" aria-label="Go to FormFinance dashboard">
       <div className="grid h-8 w-8 place-items-center rounded-lg bg-slate-900 text-sm font-bold text-white dark:bg-slate-100 dark:text-slate-900">
         F
       </div>
       <span className="hidden font-semibold tracking-[0.12em] sm:inline">FORMFINANCE</span>
-    </div>
+    </Link>
   );
 }
