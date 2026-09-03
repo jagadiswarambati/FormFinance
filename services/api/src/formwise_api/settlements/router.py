@@ -394,10 +394,16 @@ class ProcessSettlementDocumentResponse(BaseModel):
     """Response from settlement document processing"""
     settlement_id: str = Field(alias="settlementId")
     status: str
+    reference: str | None = None
+    currency: str | None = None
     gross_amount: float = Field(alias="grossAmount")
+    total_deductions: float = Field(default=0.0, alias="totalDeductions")
     net_amount: float = Field(alias="netAmount")
     deductions: list[dict]
+    verification: list[dict] = Field(default_factory=list)
+    evidence: list[dict] = Field(default_factory=list)
     decision: dict
+    audit_events: list[dict] = Field(default_factory=list, alias="auditEvents")
     document_id: str = Field(alias="documentId")
     processed_at: str = Field(alias="processedAt")
     

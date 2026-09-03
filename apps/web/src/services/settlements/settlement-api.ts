@@ -38,7 +38,7 @@ export interface SettlementProcessingResult {
   netAmount: number;
   deductions: SettlementDeduction[];
   verification?: Record<string, unknown>;
-  evidence?: SettlementEvidence | null;
+  evidence: SettlementEvidence[];
   decision: SettlementDecision;
   auditEvents?: Array<Record<string, unknown>>;
   processedAt: string;

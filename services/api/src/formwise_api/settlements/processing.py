@@ -225,10 +225,34 @@ class SettlementProcessingPipeline:
         
         # STAGE 8: Prepare response
         if decision:
+            verification_results = self._safe_list(
+                self._verification_repo, "list_for_settlement", settlement.id
+            )
+            evidence_links = [
+                link.model_dump(by_alias=True, mode="json")
+                for deduction in deductions
+                for link in self._safe_list(
+                    self._evidence_repo, "list_for_deduction", deduction.id
+                )
+            ]
+            evidence_matches = [
+                self._evidence_match_payload(item)
+                for item in verification_results
+                if item.evidence_match
+            ]
+            audit_events = [
+                event.model_dump(by_alias=True, mode="json")
+                for event in self._safe_list(
+                    self._audit_repo, "list_for_settlement", settlement.id
+                )
+            ]
             result = {
                 "settlement_id": settlement.id,
                 "status": decision.final_decision,
+                "reference": next((d.reference_id for d in deductions if d.reference_id), None),
+                "currency": settlement.currency,
                 "gross_amount": settlement.gross_amount,
+                "total_deductions": sum(d.amount for d in deductions),
                 "net_amount": settlement.net_amount,
                 "deductions": [
                     {
@@ -236,15 +260,23 @@ class SettlementProcessingPipeline:
                         "type": d.type,
                         "description": d.description,
                         "amount": d.amount,
+                        "referenceId": d.reference_id,
+                        "referenceDate": d.reference_date.isoformat() if d.reference_date else None,
                     }
                     for d in deductions
                 ],
+                "verification": [
+                    item.model_dump(by_alias=True, mode="json")
+                    for item in verification_results
+                ],
+                "evidence": evidence_matches + evidence_links,
                 "decision": {
                     "status": decision.final_decision,
                     "confidence": decision.confidence,
                     "explanation": decision.reason,
                     "timestamp": decision.created_at.isoformat() if decision.created_at else None,
                 },
+                "audit_events": audit_events,
                 "document_id": document_id,
                 "processed_at": now.isoformat(),
             }
@@ -254,7 +286,10 @@ class SettlementProcessingPipeline:
             result = {
                 "settlement_id": settlement.id,
                 "status": "pending_review",  # Default status
+                "reference": next((d.reference_id for d in deductions if d.reference_id), None),
+                "currency": settlement.currency,
                 "gross_amount": settlement.gross_amount,
+                "total_deductions": sum(d.amount for d in deductions),
                 "net_amount": settlement.net_amount,
                 "deductions": [
                     {
@@ -265,12 +300,15 @@ class SettlementProcessingPipeline:
                     }
                     for d in deductions
                 ],
+                "verification": [],
+                "evidence": [],
                 "decision": {
                     "status": "pending_review",
                     "confidence": 0.0,
                     "explanation": "Settlement awaiting verification",
                     "timestamp": now.isoformat(),
                 },
+                "audit_events": [],
                 "document_id": document_id,
                 "processed_at": now.isoformat(),
             }
@@ -290,8 +328,37 @@ class SettlementProcessingPipeline:
                     },
                 )
             )
+            result["audit_events"] = [
+                event.model_dump(by_alias=True, mode="json")
+                for event in self._safe_list(
+                    self._audit_repo, "list_for_settlement", settlement.id
+                )
+            ]
         
         return result
+
+    @staticmethod
+    def _safe_list(repository: object, method_name: str, value: str) -> list:
+        method = getattr(repository, method_name, None)
+        if not callable(method):
+            return []
+        try:
+            records = method(value)
+        except (AttributeError, TypeError):
+            return []
+        return records if isinstance(records, list) else []
+
+    @staticmethod
+    def _evidence_match_payload(result) -> dict:
+        match = result.evidence_match or {}
+        return {
+            "evidenceFound": match.get("evidence_found"),
+            "amountMatch": match.get("amount_match"),
+            "dateMatch": match.get("date_match"),
+            "referenceMatch": match.get("reference_match"),
+            "confidence": match.get("confidence"),
+            "reasons": [result.reason] if result.reason else [],
+        }
     
     def get_settlement_details(
         self,

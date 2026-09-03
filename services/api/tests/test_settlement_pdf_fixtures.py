@@ -15,6 +15,7 @@ from formwise_api.settlements.models import Settlement, SettlementDeduction
 from formwise_api.storage.local import LocalStorageAdapter
 from formwise_worker.ocr.store import LocalOcrResultStore
 from formwise_api.settlements.processing import SettlementProcessingPipeline
+from formwise_api.settlements.router import ProcessSettlementDocumentResponse
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "settlements"
@@ -242,6 +243,12 @@ def test_stored_ocr_flows_through_settlement_processing(tmp_path: Path):
     assert result["net_amount"] == 96500.0
     assert len(result["deductions"]) == 3
     assert repositories.settlements["settlement-1"].deduction_ids
+    serialized = ProcessSettlementDocumentResponse.model_validate(result).model_dump(by_alias=True)
+    assert {
+        "settlementId", "documentId", "reference", "currency", "grossAmount",
+        "totalDeductions", "netAmount", "deductions", "verification", "evidence",
+        "decision", "auditEvents", "processedAt",
+    }.issubset(serialized)
 
 
 def test_missing_ocr_storage_fails_without_fake_text(tmp_path: Path):

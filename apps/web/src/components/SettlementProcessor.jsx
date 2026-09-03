@@ -113,7 +113,7 @@ export default function SettlementProcessor() {
       setStatus('results');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Settlement processing failed.');
-      setStatus('uploaded');
+      setStatus('failed');
     }
   };
 
@@ -152,11 +152,16 @@ export default function SettlementProcessor() {
           </div>
           <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">Total deductions: {formatAmount(result.totalDeductions ?? result.deductions?.reduce((sum, item) => sum + item.amount, 0), currency)}</p>
         </section>
+        <VerificationPanel verification={result.verification} />
         <EvidencePanel evidence={result.evidence} />
         <AuditPanel events={result.auditEvents} />
         <Button onClick={reset}>Process another settlement</Button>
       </section>
     );
+  }
+
+  if (status === 'failed') {
+    return <section className="mx-auto max-w-3xl space-y-4"><div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-950"><div className="flex items-center gap-3"><XCircle className="h-6 w-6" aria-hidden="true" /><h1 className="text-2xl font-bold">FAILED</h1></div><p className="mt-3 text-sm">{error}</p></div><Button onClick={reset}>Try again</Button></section>;
   }
 
   const busy = ['uploading', 'uploading_evidence', 'starting_ocr', 'processing'].includes(status);
@@ -178,6 +183,7 @@ export default function SettlementProcessor() {
 }
 
 function Summary({ label, value }) { return <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-2 break-words font-semibold">{value ?? 'Not returned'}</p></div>; }
-function EvidencePanel({ evidence }) { return <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Evidence verification</h2>{evidence ? <div className="mt-4 grid gap-3 sm:grid-cols-2"><EvidenceValue label="Evidence found" value={evidence.evidenceFound} /><EvidenceValue label="Amount match" value={evidence.amountMatch} /><EvidenceValue label="Date match" value={evidence.dateMatch} /><EvidenceValue label="Reference match" value={evidence.referenceMatch} /></div> : <p className="mt-3 text-sm text-slate-500">Evidence comparison was not returned for this processing run.</p>}</section>; }
+function VerificationPanel({ verification }) { return <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Verification</h2>{verification?.length ? <ul className="mt-3 space-y-2 text-sm">{verification.map((item) => <li key={item.id ?? item.deductionId} className="flex justify-between gap-3"><span>{item.reason ?? 'Verification result'}</span><strong>{item.status ?? 'Not returned'}</strong></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">Verification details were not returned.</p>}</section>; }
+function EvidencePanel({ evidence }) { return <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Evidence verification</h2>{evidence?.length ? <div className="mt-4 space-y-3">{evidence.map((item, index) => <div key={item.id ?? `evidence-${index}`} className="grid gap-2 sm:grid-cols-2"><EvidenceValue label="Evidence found" value={item.evidenceFound} /><EvidenceValue label="Amount match" value={item.amountMatch} /><EvidenceValue label="Date match" value={item.dateMatch} /><EvidenceValue label="Reference match" value={item.referenceMatch} /></div>)}</div> : <p className="mt-3 text-sm text-slate-500">Evidence comparison was not returned for this processing run.</p>}</section>; }
 function EvidenceValue({ label, value }) { return <div className="flex justify-between border-b border-slate-100 py-2 text-sm dark:border-slate-800"><span>{label}</span><strong>{value === true ? 'Yes' : value === false ? 'No' : 'Not returned'}</strong></div>; }
 function AuditPanel({ events }) { return <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Audit events</h2>{events?.length ? <ul className="mt-3 space-y-2 text-sm">{events.map((event, index) => <li key={`${event.id ?? 'event'}-${index}`} className="flex justify-between gap-3"><span>{event.action ?? 'Event'}</span><span className="text-slate-500">{event.timestamp ?? ''}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">Audit events are stored by the backend but were not included in this response.</p>}</section>; }
