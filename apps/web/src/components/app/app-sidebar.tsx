@@ -1,17 +1,17 @@
 'use client';
 
-import { FileText, History, Home, Menu, Settings, Upload, WalletCards, X } from 'lucide-react';
+import { ChartNoAxesCombined, FileText, Home, Menu, Settings, Upload, WalletCards, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { href: '/app', label: 'Home', icon: Home },
-  { href: '/app/upload', label: 'Upload', icon: Upload },
-  { href: '/app/forms', label: 'My Forms', icon: FileText },
+  { href: '/app', label: 'Dashboard', icon: Home },
   { href: '/app/settlements', label: 'Settlements', icon: WalletCards },
-  { href: '/app/history', label: 'History', icon: History },
+  { href: '/app/history', label: 'Batch Results', icon: ChartNoAxesCombined },
+  { href: '/app/upload', label: 'Documents', icon: Upload },
+  { href: '/app/forms', label: 'All Documents', icon: FileText },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -67,7 +67,7 @@ export function AppSidebar({
         aria-label="Mobile navigation"
       >
         <div className="mb-6 flex items-center justify-between px-5">
-          <span className="font-semibold">FormWise AI</span>
+          <span className="font-semibold tracking-[0.12em]">FORMFINANCE</span>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close navigation">
             <X className="h-5 w-5" />
           </Button>
