@@ -1,402 +1,183 @@
-/**
- * Settlement Processing Frontend Component
- * REAL FORMWISE INTEGRATION - No mock OCR
- * 
- * Actual workflow:
- * 1. User uploads settlement PDF via FormWise document API
- * 2. Document stored in FormWise storage
- * 3. Trigger FormWise OCR processing (PaddleOCR)
- * 4. Retrieve OCR text from FormWise storage
- * 5. Pass real OCR text to settlement extraction API
- * 6. Process deductions, verification, evidence matching
- * 7. AI investigation for unresolved cases
- * 8. Generate decision
- * 9. Display results with audit trail
- */
+'use client';
 
 import React, { useState } from 'react';
+import { AlertCircle, CheckCircle2, FileText, LoaderCircle, UploadCloud, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/auth-context';
+import {
+  completeUpload,
+  createUploadIntent,
+  getOcrStatus,
+  startOcr,
+  uploadToTarget,
+} from '@/services/documents/upload-api';
+import { processSettlementDocument } from '@/services/settlements/settlement-api';
 
-const SettlementProcessor = () => {
-  const [state, setState] = useState({
-    step: 'upload', // upload | ocr_processing | processing | results
-    settlementDoc: null,
-    settlementDocId: null,
-    evidenceDocs: [],
-    evidenceDocIds: [],
-    results: null,
-    error: null,
-    loading: false,
-    ocrStatus: null,
-  });
+const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
-  // REAL: Step 1 - Upload settlement PDF via FormWise API
-  const handleSettlementUpload = async (event) => {
+function formatAmount(value, currency = 'INR') {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value ?? 0);
+}
+
+function decisionLabel(status) {
+  return { approve: 'APPROVED', flag: 'FLAGGED', escalate: 'ESCALATED' }[status] ?? status.toUpperCase();
+}
+
+function DecisionIcon({ status }) {
+  if (status === 'approve') return <CheckCircle2 className="h-6 w-6" aria-hidden="true" />;
+  if (status === 'escalate') return <XCircle className="h-6 w-6" aria-hidden="true" />;
+  return <AlertCircle className="h-6 w-6" aria-hidden="true" />;
+}
+
+async function uploadDocument(file, idToken) {
+  const intent = await createUploadIntent(file, idToken);
+  await uploadToTarget(file, intent.uploadUrl);
+  await completeUpload(intent.documentId, idToken);
+  return intent.documentId;
+}
+
+async function waitForOcr(documentId, idToken, setOcrStatus) {
+  await startOcr(documentId, idToken);
+  let currentStatus = 'processing';
+  for (let attempt = 0; attempt < 60 && currentStatus !== 'completed'; attempt += 1) {
+    setOcrStatus(currentStatus);
+    if (currentStatus === 'failed') throw new Error('PaddleOCR processing failed.');
+    await wait(5000);
+    currentStatus = (await getOcrStatus(documentId, idToken)).ocrStatus;
+  }
+  if (currentStatus !== 'completed') throw new Error('OCR is still processing. Please try again shortly.');
+}
+
+export default function SettlementProcessor() {
+  const { firebaseUser } = useAuth();
+  const [settlementFile, setSettlementFile] = useState(null);
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
+  const [settlementDocumentId, setSettlementDocumentId] = useState(null);
+  const [evidenceDocumentIds, setEvidenceDocumentIds] = useState([]);
+  const [status, setStatus] = useState('idle');
+  const [ocrStatus, setOcrStatus] = useState(null);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const selectSettlement = (event) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (file) setSettlementFile(file);
+  };
 
-    setState(prev => ({ ...prev, loading: true, error: null }));
-
+  const uploadSettlement = async () => {
+    if (!settlementFile || !firebaseUser) return;
+    setError(null);
+    setStatus('uploading');
     try {
-      // Step 1a: Create upload intent
-      const intentResponse = await fetch('/documents/upload-intents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          original_filename: file.name,
-          content_type: file.type,
-          file_size: file.size,
-        }),
-      });
-
-      if (!intentResponse.ok) throw new Error('Failed to create upload intent');
-      const { document_id: docId, upload_url } = await intentResponse.json();
-
-      // Step 1b: Upload file to FormWise storage
-      await fetch(upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-
-      // Step 1c: Mark upload complete
-      const completeResponse = await fetch(`/documents/${docId}/complete`, {
-        method: 'POST',
-      });
-
-      if (!completeResponse.ok) throw new Error('Failed to complete upload');
-
-      setState(prev => ({
-        ...prev,
-        settlementDoc: file,
-        settlementDocId: docId,
-        loading: false,
-        ocrStatus: 'uploaded',
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: `Upload failed: ${err.message}`,
-        loading: false,
-      }));
+      const id = await uploadDocument(settlementFile, await firebaseUser.getIdToken());
+      setSettlementDocumentId(id);
+      setStatus('uploaded');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Settlement upload failed.');
+      setStatus('idle');
     }
   };
 
-  // REAL: Step 2 - Trigger FormWise OCR and wait for completion
-  const triggerOCR = async () => {
-    if (!state.settlementDocId) {
-      setState(prev => ({ ...prev, error: 'No document to process' }));
-      return;
-    }
-
-    setState(prev => ({ 
-      ...prev, 
-      loading: true, 
-      ocrStatus: 'processing',
-      step: 'ocr_processing'
-    }));
-
+  const uploadEvidence = async (event) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!firebaseUser || files.length === 0) return;
+    setError(null);
+    setStatus('uploading_evidence');
     try {
-      // Trigger OCR
-      const ocrStartResponse = await fetch(`/documents/${state.settlementDocId}/ocr`, {
-        method: 'POST',
-      });
+      const token = await firebaseUser.getIdToken();
+      const ids = [];
+      for (const file of files) ids.push(await uploadDocument(file, token));
+      setEvidenceFiles((current) => [...current, ...files]);
+      setEvidenceDocumentIds((current) => [...current, ...ids]);
+      setStatus('uploaded');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Evidence upload failed.');
+      setStatus('uploaded');
+    }
+  };
 
-      if (!ocrStartResponse.ok) throw new Error('Failed to start OCR');
-
-      // Poll for OCR completion
-      let ocrText = null;
-      let attempts = 0;
-      const maxAttempts = 60; // 5 minutes with 5-second intervals
-
-      while (!ocrText && attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 5000)); // Wait 5 seconds
-        attempts++;
-
-        const ocrStatusResponse = await fetch(`/documents/${state.settlementDocId}/ocr`);
-        const ocrData = await ocrStatusResponse.json();
-
-        if (ocrData.status === 'completed') {
-          ocrText = ocrData.extracted_text;
-          setState(prev => ({ ...prev, ocrStatus: 'completed' }));
-        } else if (ocrData.status === 'failed') {
-          throw new Error('OCR processing failed');
-        }
+  const process = async () => {
+    if (!settlementDocumentId || !firebaseUser) return;
+    setError(null);
+    setResult(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      setStatus('starting_ocr');
+      await waitForOcr(settlementDocumentId, token, setOcrStatus);
+      for (const evidenceDocumentId of evidenceDocumentIds) {
+        await waitForOcr(evidenceDocumentId, token, setOcrStatus);
       }
-
-      if (!ocrText) throw new Error('OCR processing timeout');
-
-      // Proceed to settlement processing
-      await processSettlement(ocrText);
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: `OCR failed: ${err.message}`,
-        loading: false,
-        ocrStatus: 'failed',
-      }));
+      setOcrStatus('completed');
+      setStatus('processing');
+      setResult(await processSettlementDocument(settlementDocumentId, evidenceDocumentIds, token));
+      setStatus('results');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Settlement processing failed.');
+      setStatus('uploaded');
     }
   };
 
-  // REAL: Step 3 - Process settlement with real OCR text
-  const processSettlement = async (ocrText) => {
-    setState(prev => ({ 
-      ...prev, 
-      loading: true, 
-      step: 'processing',
-      ocrStatus: null
-    }));
-
-    try {
-      // Call real settlement processing API with actual OCR text
-      const response = await fetch('/v1/settlements/process-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          documentId: state.settlementDocId,
-          ocrText: ocrText, // REAL OCR text from FormWise
-          evidenceDocumentIds: state.evidenceDocIds,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Processing failed: ${error}`);
-      }
-
-      const results = await response.json();
-      setState(prev => ({
-        ...prev,
-        results,
-        step: 'results',
-        loading: false,
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: err.message,
-        loading: false,
-        step: 'upload',
-      }));
-    }
+  const reset = () => {
+    setSettlementFile(null);
+    setEvidenceFiles([]);
+    setSettlementDocumentId(null);
+    setEvidenceDocumentIds([]);
+    setResult(null);
+    setOcrStatus(null);
+    setError(null);
+    setStatus('idle');
   };
 
-  // REAL: Upload evidence documents via FormWise API
-  const handleEvidenceUpload = async (event) => {
-    const files = event.target.files;
-    if (!files) return;
-
-    setState(prev => ({ ...prev, loading: true, error: null }));
-
-    try {
-      const newEvidenceIds = [];
-
-      for (const file of Array.from(files)) {
-        // Create upload intent
-        const intentResponse = await fetch('/documents/upload-intents', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            original_filename: file.name,
-            content_type: file.type,
-            file_size: file.size,
-          }),
-        });
-
-        if (!intentResponse.ok) continue;
-
-        const { document_id: docId, upload_url } = await intentResponse.json();
-
-        // Upload file
-        await fetch(upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        });
-
-        // Complete upload
-        await fetch(`/documents/${docId}/complete`, { method: 'POST' });
-
-        newEvidenceIds.push(docId);
-      }
-
-      setState(prev => ({
-        ...prev,
-        evidenceDocs: [...prev.evidenceDocs, ...Array.from(files)],
-        evidenceDocIds: [...prev.evidenceDocIds, ...newEvidenceIds],
-        loading: false,
-      }));
-    } catch (err) {
-      setState(prev => ({
-        ...prev,
-        error: `Evidence upload failed: ${err.message}`,
-        loading: false,
-      }));
-    }
-  };
-
-  const handleRemoveEvidence = (index) => {
-    setState(prev => ({
-      ...prev,
-      evidenceDocs: prev.evidenceDocs.filter((_, i) => i !== index),
-      evidenceDocIds: prev.evidenceDocIds.filter((_, i) => i !== index),
-    }));
-  };
-
-  // Render upload step
-  if (state.step === 'upload') {
+  if (status === 'results' && result) {
+    const decision = result.decision ?? { status: result.status, confidence: 0, explanation: 'No decision details returned.' };
+    const decisionStatus = decision.status === 'approved' ? 'approve' : decision.status;
+    const currency = result.currency ?? 'INR';
     return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-        <h1>Settlement Processor</h1>
-        <p>Upload a settlement PDF to begin processing</p>
-
-        <div style={{ marginBottom: '20px' }}>
-          <h3>Settlement Document</h3>
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={handleSettlementUpload}
-            disabled={state.loading}
-          />
-          {state.settlementDoc && (
-            <p>Selected: {state.settlementDoc.name}</p>
-          )}
+      <section className="mx-auto max-w-5xl space-y-6">
+        <div className={`rounded-2xl border p-6 ${decisionStatus === 'approve' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : decisionStatus === 'escalate' ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+          <div className="flex items-center gap-3"><DecisionIcon status={decisionStatus} /><div><p className="text-sm font-medium">Final decision</p><h1 className="text-2xl font-bold">{decisionLabel(decisionStatus)}</h1></div></div>
+          <p className="mt-4 text-sm">{decision.explanation}</p>
+          <p className="mt-2 text-sm font-medium">Confidence: {Math.round((decision.confidence ?? 0) * 100)}%</p>
         </div>
-
-        <div style={{ marginBottom: '20px' }}>
-          <h3>Evidence Documents (Optional)</h3>
-          <input
-            type="file"
-            multiple
-            onChange={handleEvidenceUpload}
-            disabled={state.loading || !state.settlementDocId}
-          />
-          {state.evidenceDocs.length > 0 && (
-            <ul>
-              {state.evidenceDocs.map((doc, i) => (
-                <li key={i}>
-                  {doc.name}
-                  <button onClick={() => handleRemoveEvidence(i)}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Summary label="Settlement ID" value={result.settlementId} />
+          <Summary label="Reference" value={result.reference ?? result.documentId} />
+          <Summary label="Gross amount" value={formatAmount(result.grossAmount, currency)} />
+          <Summary label="Net amount" value={formatAmount(result.netAmount, currency)} />
         </div>
-
-        {state.settlementDocId && (
-          <button
-            onClick={triggerOCR}
-            disabled={state.loading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: state.loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {state.loading ? 'Processing...' : 'Process Settlement'}
-          </button>
-        )}
-
-        {state.error && (
-          <div style={{ color: 'red', marginTop: '20px' }}>
-            Error: {state.error}
+        <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <h2 className="font-semibold">Deductions</h2>
+          <div className="mt-4 divide-y divide-slate-200 dark:divide-slate-800">
+            {result.deductions?.map((deduction) => <div className="flex flex-wrap items-center gap-3 py-3" key={deduction.id}><span className="w-28 text-sm font-medium capitalize">{deduction.type}</span><span className="text-sm">{formatAmount(deduction.amount, currency)}</span><span className="flex-1 text-sm text-slate-500">{deduction.reason ?? deduction.description}</span></div>)}
           </div>
-        )}
-      </div>
+          <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">Total deductions: {formatAmount(result.totalDeductions ?? result.deductions?.reduce((sum, item) => sum + item.amount, 0), currency)}</p>
+        </section>
+        <EvidencePanel evidence={result.evidence} />
+        <AuditPanel events={result.auditEvents} />
+        <Button onClick={reset}>Process another settlement</Button>
+      </section>
     );
   }
 
-  // Render OCR processing step
-  if (state.step === 'ocr_processing') {
-    return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
-        <h1>Processing OCR</h1>
-        <p>Status: {state.ocrStatus}</p>
-        <p>Extracting text from PDF using FormWise OCR (PaddleOCR)...</p>
-        {state.error && (
-          <div style={{ color: 'red' }}>Error: {state.error}</div>
-        )}
+  const busy = ['uploading', 'uploading_evidence', 'starting_ocr', 'processing'].includes(status);
+  return (
+    <section className="mx-auto max-w-3xl space-y-6">
+      <div><h1 className="text-3xl font-semibold">Settlement verification</h1><p className="mt-2 text-slate-600 dark:text-slate-300">Upload settlement and evidence PDFs for FormWise OCR and finance verification.</p></div>
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 dark:border-slate-700 dark:bg-slate-950">
+        <UploadCloud className="h-8 w-8 text-sky-700" aria-hidden="true" /><h2 className="mt-4 font-semibold">Settlement PDF</h2>
+        <input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" onChange={selectSettlement} disabled={busy} />
+        {settlementFile && <p className="mt-3 text-sm text-slate-600">{settlementFile.name}</p>}
+        {!settlementDocumentId && <Button className="mt-4" onClick={() => void uploadSettlement()} disabled={!settlementFile || busy}>{status === 'uploading' ? 'Uploading…' : 'Upload settlement'}</Button>}
+        {settlementDocumentId && <p className="mt-3 text-sm text-emerald-700">Uploaded document: {settlementDocumentId}</p>}
       </div>
-    );
-  }
+      {settlementDocumentId && <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Evidence PDFs</h2><input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" multiple onChange={(event) => void uploadEvidence(event)} disabled={busy} />{evidenceFiles.length > 0 && <ul className="mt-3 space-y-2 text-sm">{evidenceFiles.map((file, index) => <li className="flex items-center gap-2" key={`${file.name}-${index}`}><FileText className="h-4 w-4" aria-hidden="true" />{file.name}</li>)}</ul>}<Button className="mt-5" onClick={() => void process()} disabled={busy}>{busy ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />{status === 'processing' ? 'Processing settlement…' : 'Preparing…'}</> : 'Run settlement verification'}</Button></div>}
+      {ocrStatus && <p className="text-sm text-slate-600" role="status">OCR status: {ocrStatus}</p>}
+      {error && <p className="text-sm text-rose-700" role="alert">{error}</p>}
+    </section>
+  );
+}
 
-  // Render results step
-  if (state.step === 'results') {
-    const r = state.results;
-    return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
-        <h1>Settlement Processing Results</h1>
-
-        {r.settlement_id && (
-          <div style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
-            <h3>Settlement #{r.settlement_id}</h3>
-            <p>Status: <strong>{r.status}</strong></p>
-            <p>Gross Amount: {r.gross_amount}</p>
-            <p>Net Amount: {r.net_amount}</p>
-          </div>
-        )}
-
-        {r.deductions && r.deductions.length > 0 && (
-          <div style={{ marginBottom: '20px' }}>
-            <h3>Deductions</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #ccc' }}>
-                  <th style={{ textAlign: 'left', padding: '10px' }}>Type</th>
-                  <th style={{ textAlign: 'left', padding: '10px' }}>Amount</th>
-                  <th style={{ textAlign: 'left', padding: '10px' }}>Confidence</th>
-                  <th style={{ textAlign: 'left', padding: '10px' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.deductions.map((d, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '10px' }}>{d.deduction_type}</td>
-                    <td style={{ padding: '10px' }}>{d.amount}</td>
-                    <td style={{ padding: '10px' }}>{(d.extracted_with_confidence * 100).toFixed(0)}%</td>
-                    <td style={{ padding: '10px' }}>{d.verification_status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {r.decision && (
-          <div style={{
-            padding: '15px',
-            backgroundColor: r.decision.status === 'approved' ? '#d4edda' : '#fff3cd',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            marginBottom: '20px'
-          }}>
-            <h3>Final Decision</h3>
-            <p><strong>Status:</strong> {r.decision.status.toUpperCase()}</p>
-            <p><strong>Confidence:</strong> {(r.decision.confidence * 100).toFixed(0)}%</p>
-            <p><strong>Explanation:</strong> {r.decision.explanation}</p>
-          </div>
-        )}
-
-        <button
-          onClick={() => setState(prev => ({ ...prev, step: 'upload', results: null }))}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#28a745',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
-          Process Another Settlement
-        </button>
-      </div>
-    );
-  }
-
-  return null;
-};
-
-export default SettlementProcessor;
+function Summary({ label, value }) { return <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-2 break-words font-semibold">{value ?? 'Not returned'}</p></div>; }
+function EvidencePanel({ evidence }) { return <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Evidence verification</h2>{evidence ? <div className="mt-4 grid gap-3 sm:grid-cols-2"><EvidenceValue label="Evidence found" value={evidence.evidenceFound} /><EvidenceValue label="Amount match" value={evidence.amountMatch} /><EvidenceValue label="Date match" value={evidence.dateMatch} /><EvidenceValue label="Reference match" value={evidence.referenceMatch} /></div> : <p className="mt-3 text-sm text-slate-500">Evidence comparison was not returned for this processing run.</p>}</section>; }
+function EvidenceValue({ label, value }) { return <div className="flex justify-between border-b border-slate-100 py-2 text-sm dark:border-slate-800"><span>{label}</span><strong>{value === true ? 'Yes' : value === false ? 'No' : 'Not returned'}</strong></div>; }
+function AuditPanel({ events }) { return <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-semibold">Audit events</h2>{events?.length ? <ul className="mt-3 space-y-2 text-sm">{events.map((event, index) => <li key={`${event.id ?? 'event'}-${index}`} className="flex justify-between gap-3"><span>{event.action ?? 'Event'}</span><span className="text-slate-500">{event.timestamp ?? ''}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">Audit events are stored by the backend but were not included in this response.</p>}</section>; }

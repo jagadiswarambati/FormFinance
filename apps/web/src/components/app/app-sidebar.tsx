@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, History, Home, Menu, Settings, Upload, X } from 'lucide-react';
+import { FileText, History, Home, Menu, Settings, Upload, WalletCards, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ const items = [
   { href: '/app', label: 'Home', icon: Home },
   { href: '/app/upload', label: 'Upload', icon: Upload },
   { href: '/app/forms', label: 'My Forms', icon: FileText },
+  { href: '/app/settlements', label: 'Settlements', icon: WalletCards },
   { href: '/app/history', label: 'History', icon: History },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ];

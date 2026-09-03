@@ -144,6 +144,17 @@ export async function startOcr(documentId: string, idToken: string): Promise<Doc
   return response.json() as Promise<DocumentRecord>;
 }
 
+export async function getOcrStatus(
+  documentId: string,
+  idToken: string,
+): Promise<Pick<DocumentRecord, 'ocrStatus' | 'ocrProvider' | 'ocrConfidence' | 'textLength'>> {
+  const response = await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/documents/${documentId}/ocr`, {
+    headers: { ...headers(idToken), cache: 'no-store' },
+  });
+  await ensureResponse(response);
+  return response.json() as Promise<Pick<DocumentRecord, 'ocrStatus' | 'ocrProvider' | 'ocrConfidence' | 'textLength'>>;
+}
+
 export async function scanPrivacy(documentId: string, idToken: string): Promise<PrivacyReport> {
   const response = await fetch(
     `${env.NEXT_PUBLIC_API_BASE_URL}/documents/${documentId}/privacy/scan`,
