@@ -1,273 +1,890 @@
-================================================================================
-FORMWISE-FINANCE DAYS 1-8 COMPLETE BACKUP
-Ready to Download
-================================================================================
+FormFinance
 
-THREE DOWNLOADABLE FILES AVAILABLE:
+AI Finance Controller for Settlement Verification & Reconciliation
 
-1. FORMWISE_DAYS_1_8_COMPLETE_BACKUP.zip (103 KB)
-   └─ Complete project backup with exact folder structure
-   └─ 28 Python source files (all 4043+ lines, no truncation)
-   └─ 6 comprehensive test suites (40+ passing tests)
-   └─ 2 synthetic data generators (15 test cases)
-   └─ Full Firestore schema
-   └─ Ready to extract directly into your project
+FormFinance is an AI-assisted finance operations system built for the Razorpay AI Buildathon — Track 04: AI Finance Controller.
 
-2. PROJECT_STRUCTURE_FINANCE.txt (15 KB)
-   └─ Complete project documentation
-   └─ Detailed directory tree
-   └─ Daily implementation summary
-   └─ Architecture patterns
-   └─ API endpoints reference
-   └─ Firestore collections schema
-   └─ Feature checklist
+It extends the existing FormWise document-processing infrastructure into a finance-controller workflow that automates settlement verification, deduction analysis, evidence matching, exception investigation, final decisioning, and auditability.
 
-3. BACKUP_MANIFEST.txt (12 KB)
-   └─ Complete contents listing
-   └─ File verification checklist
-   └─ Installation instructions
-   └─ Troubleshooting guide
-   └─ Archive integrity information
+Core Workflow
 
-================================================================================
-QUICK START
-================================================================================
+Settlement PDF
+      ↓
+FormWise Document Upload
+      ↓
+PaddleOCR
+      ↓
+OCR Storage
+      ↓
+Settlement Extraction
+      ↓
+Deduction Analysis
+      ↓
+Deterministic Verification
+      ↓
+Evidence Matching
+      ↓
+Finance Investigation
+      ↓
+Final Decision
+      ↓
+Audit Trail + Metrics
 
-1. Download all three files from the links below
+The objective is to close a finance-operations loop instead of simply extracting information from documents.
 
-2. Extract the ZIP:
-   unzip FORMWISE_DAYS_1_8_COMPLETE_BACKUP.zip -d /path/to/FORMWISE-AI-main
+What FormFinance Does
 
-3. Verify installation:
-   cd /path/to/FORMWISE-AI-main/services/api
-   uv run pytest tests/test_settlements_foundation.py -v
+FormFinance processes settlement documents and determines whether each settlement should be:
 
-4. Review documentation:
-   - Read PROJECT_STRUCTURE_FINANCE.txt for complete overview
-   - Check BACKUP_MANIFEST.txt for detailed file listing
+APPROVED — settlement passes the configured verification checks
 
-================================================================================
-WHAT YOU GET
-================================================================================
+FLAGGED — an exception has been detected and requires review
 
-✓ 23 NEW FILES CREATED (complete)
-  - settlements module (10 files)
-  - verification module (2 files)
-  - evidence module (2 files)
-  - audit module (2 files)
-  - ai_provider (1 file)
-  - tests (6 files)
+ESCALATED — the case requires deeper investigation
 
-✓ 1 FILE MODIFIED
-  - api.py (settlements_router registration)
+FAILED — required information could not be extracted or processed
 
-✓ COMPREHENSIVE TESTING
-  - 6 test suites with 40+ tests
-  - 5 synthetic settlements
-  - 10 synthetic OCR documents
-  - All tests passing ✓
+Every decision is intended to remain explainable through the underlying verification results, evidence checks, reasons, and audit events.
 
-✓ ZERO EXTERNAL DEPENDENCIES
-  - Uses existing FormWise stack
-  - Pydantic v2, Firestore, FastAPI
-  - No new packages required
+Key Features
 
-✓ PRODUCTION READY
-  - Complete audit trail
-  - End-to-end workflow
-  - Error handling
-  - Proper architecture patterns
+1. Real PDF → OCR Pipeline
 
-================================================================================
-FILE STRUCTURE
-================================================================================
+FormFinance reuses the existing FormWise document infrastructure instead of creating a separate document-processing system.
 
-After extraction, your project will have:
+PDF
+ ↓
+FormWise Upload
+ ↓
+PaddleOCR
+ ↓
+OCR Result Storage
+ ↓
+Settlement Processing
 
-FORMWISE-AI-main/
-└── services/api/
-    ├── src/formwise_api/
-    │   ├── settlements/              [NEW]
-    │   │   ├── models.py
-    │   │   ├── repository.py
-    │   │   ├── service.py
-    │   │   ├── extraction_service.py
-    │   │   ├── deterministic_verifier.py
-    │   │   ├── verification_service.py
-    │   │   ├── evidence_matcher.py
-    │   │   ├── finance_agent.py
-    │   │   ├── document_extractor.py
-    │   │   └── router.py
-    │   ├── verification/              [NEW]
-    │   │   ├── models.py
-    │   │   └── repository.py
-    │   ├── evidence/                  [NEW]
-    │   │   ├── models.py
-    │   │   └── repository.py
-    │   ├── audit/                     [NEW]
-    │   │   ├── finance_audit_events.py
-    │   │   └── repository.py
-    │   ├── ai_provider/
-    │   │   └── mock.py                [NEW]
-    │   └── api.py                     [MODIFIED]
-    └── tests/
-        ├── test_settlements_foundation.py
-        ├── test_settlements_extraction_verification.py
-        ├── test_settlements_evidence_agent.py
-        ├── test_settlements_document_flow.py
-        ├── synthetic_data.py
-        └── synthetic_documents.py
+The settlement-processing pipeline reads the actual stored OCR result.
 
-================================================================================
-FEATURES INCLUDED
-================================================================================
+It does not generate placeholder OCR text when OCR is unavailable.
 
-SETTLEMENT VERIFICATION WORKFLOW:
-  1. Document OCR Text → Settlement Extraction
-  2. Deterministic Verification (15+ rules)
-  3. Evidence Matching
-  4. AI Agent Investigation (async)
-  5. Final Decision (approve/flag/escalate)
-  6. Complete Audit Trail
+2. Settlement Extraction
 
-VERIFICATION STAGES:
-  ✓ Arithmetic validation
-  ✓ Amount validation
-  ✓ Confidence checks
-  ✓ Evidence matching
-  ✓ AI-based investigation
-  ✓ Settlement decision
+The settlement extraction layer converts OCR text into structured settlement data.
 
-API ENDPOINTS:
-  ✓ POST /v1/settlements
-  ✓ GET /v1/settlements
-  ✓ GET /v1/settlements/{id}
-  ✓ POST /v1/settlements/{id}/extract
-  ✓ POST /v1/settlements/{id}/verify
+It can process:
 
-FIRESTORE COLLECTIONS:
-  ✓ settlements
-  ✓ settlementDeductions
-  ✓ verificationResults
-  ✓ settlementDecisions
-  ✓ evidenceLinks
-  ✓ financeAuditEvents
+Settlement ID
 
-================================================================================
-INTEGRATION NOTES
-================================================================================
+Settlement/reference number
 
-✓ NO BREAKING CHANGES
-  - Complete backward compatibility
-  - Existing code unaffected
-  - New modules are isolated
+Settlement date
 
-✓ NO NEW DEPENDENCIES
-  - Uses existing project stack
-  - No pip install needed
-  - No configuration changes
+Gross amount
 
-✓ READY FOR PRODUCTION
-  - Comprehensive error handling
-  - Proper logging
-  - Audit trail complete
-  - Mock implementations for testing
+Deductions
 
-✓ DOCUMENTATION INCLUDED
-  - Project structure guide
-  - API reference
-  - Firestore schema
-  - Architecture patterns
-  - Test examples
+Deduction type
 
-================================================================================
-DOWNLOAD LINKS
-================================================================================
+Deduction amount
 
-The following files are ready to download from the outputs directory:
+Deduction reason
 
-1. FORMWISE_DAYS_1_8_COMPLETE_BACKUP.zip
-   Size: 103 KB | Content: 28 Python files + 6 test suites
+Net payout
 
-2. PROJECT_STRUCTURE_FINANCE.txt
-   Size: 15 KB | Content: Complete documentation
+Currency
 
-3. BACKUP_MANIFEST.txt
-   Size: 12 KB | Content: Detailed manifest and guide
+Extraction confidence
 
-4. README_DOWNLOAD.txt
-   Size: This file | Content: Quick start guide
+3. Deterministic Financial Verification
 
-================================================================================
-VERIFICATION CHECKLIST
-================================================================================
+Financial verification is performed through deterministic rules so that calculations and core financial checks remain predictable and reproducible.
 
-After download and extraction, verify:
+Checks include:
 
-✓ All files extracted correctly:
-  cd /path/to/FORMWISE-AI-main
-  find services/api/src/formwise_api/settlements -name "*.py" | wc -l
-  # Should show 11+ files
+Arithmetic validation
 
-✓ Tests run successfully:
-  cd services/api
-  uv run pytest tests/test_settlements_foundation.py -v
-  # Should show 15/15 passed
+Gross amount validation
 
-✓ No import errors:
-  uv run python -c "from formwise_api.settlements.models import Settlement; print('✓')"
-  # Should print ✓
+Deduction validation
 
-✓ All modules present:
-  uv run python -c "from formwise_api.settlements import router; print('✓')"
-  # Should print ✓
+Net payout validation
 
-================================================================================
-SUPPORT
-================================================================================
+Required-field validation
 
-If you have questions:
-1. Review PROJECT_STRUCTURE_FINANCE.txt for complete documentation
-2. Check BACKUP_MANIFEST.txt for file listing and structure
-3. Review docstrings in source files
-4. Run tests to see usage examples
+Confidence checks
 
-Common issues:
-- Import errors: Ensure services/api/src is in Python path
-- Test failures: Check pytest is installed, run from services/api dir
-- Extraction fails: Use native unzip tool, check disk space
+Reference validation
 
-================================================================================
-SUMMARY
-================================================================================
+Deduction-type validation
 
-You now have a complete, production-ready FORMWISE-FINANCE implementation for:
+Settlement consistency checks
 
-✓ Settlement verification and evidence-based deduction tracking
-✓ Deterministic rule-based checks + AI agent investigation
-✓ Document extraction with real OCR text parsing
-✓ Complete audit trail with 8+ event types
-✓ API endpoints for creation, extraction, and verification
-✓ Firestore collections for persistence
-✓ Comprehensive test suite (40+ tests, all passing)
+4. Evidence Matching
 
-Days 1-8: ✓ COMPLETE
+Settlement deductions can be checked against supporting OCR documents.
 
-Ready for Days 9-10:
-- Dashboard & Human Review
-- Batch Processing
-- Advanced Reporting
+Evidence matching evaluates:
 
-================================================================================
-DOWNLOAD NOW
-================================================================================
+Amount
 
-Click the download links below to get your complete backup:
+Date
 
-📦 FORMWISE_DAYS_1_8_COMPLETE_BACKUP.zip (Main Backup - 103 KB)
-📄 PROJECT_STRUCTURE_FINANCE.txt (Documentation - 15 KB)
-📋 BACKUP_MANIFEST.txt (Manifest - 12 KB)
+Reference / transaction ID
 
-All files are ready in the outputs directory.
+Results distinguish between:
 
-================================================================================
+Evidence found and matched
+
+Evidence found but mismatched
+
+Evidence not found
+
+Evidence with missing required fields
+
+5. Finance Investigation
+
+Unresolved cases can be investigated using finance-specific verification and evidence tools.
+
+The finance investigation layer can perform operations such as:
+
+Comparing amounts
+
+Verifying references
+
+Checking deduction types
+
+Searching available evidence
+
+The implementation should be described accurately as AI-assisted / agentic finance investigation backed by deterministic finance tools, rather than claiming autonomous behavior beyond what is actually implemented.
+
+6. Final Decision
+
+Verification and investigation results feed into a final settlement decision.
+
+Possible outcomes:
+
+APPROVED
+FLAGGED
+ESCALATED
+FAILED
+
+The UI exposes the decision together with:
+
+Confidence
+
+Reasons
+
+Verification results
+
+Evidence results
+
+Processing status
+
+Audit events
+
+7. Audit Trail
+
+Important finance operations generate audit events for later review, including processing, extraction, verification, evidence evaluation, investigation, decision, and failure events.
+
+50-Record Batch Benchmark
+
+FormFinance includes a deterministic synthetic benchmark representing a batch of 50 settlement records.
+
+Result
+
+Records
+
+Approved
+
+20
+
+Flagged
+
+12
+
+Escalated
+
+13
+
+Extraction Failed
+
+5
+
+Total
+
+50
+
+The benchmark contains positive cases, exceptions, escalations, and extraction failures.
+
+It is designed to demonstrate finance-controller throughput and exception handling.
+
+Benchmark Metrics
+
+The batch-processing layer tracks:
+
+Total records
+
+Processed records
+
+Extraction success
+
+Approved records
+
+Flagged records
+
+Escalated records
+
+Failed records
+
+Evidence checks
+
+Evidence match rate
+
+Exception rate
+
+Metrics should be derived from processing results rather than hard-coded in the frontend.
+
+Synthetic Settlement Documents
+
+Deterministic synthetic PDF fixtures are included for testing the settlement workflow.
+
+Location:
+
+services/api/tests/fixtures/settlements/
+
+Scenarios include:
+
+Valid settlement
+
+Matching evidence
+
+Evidence mismatch
+
+Missing evidence
+
+Deduction mismatch
+
+Escalation scenarios
+
+Multiple deductions
+
+These documents are for development, testing, and demonstration only. No real customer financial data is required.
+
+Architecture
+
+                         ┌──────────────────────┐
+                         │   Settlement PDF      │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ FormWise Upload      │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ PaddleOCR            │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ OCR Result Storage   │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Settlement Extraction│
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │ Deduction + Financial Checks │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Evidence Matching    │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Finance Investigation│
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Final Decision       │
+                         │ APPROVED / FLAGGED   │
+                         │ ESCALATED / FAILED   │
+                         └──────────┬───────────┘
+                                    │
+                       ┌────────────┴────────────┐
+                       ▼                         ▼
+                ┌──────────────┐          ┌──────────────┐
+                │ Audit Trail  │          │ Metrics/UI   │
+                └──────────────┘          └──────────────┘
+
+Repository Structure
+
+FormFinance/
+│
+├── apps/
+│   └── web/
+│       └── src/
+│           ├── app/
+│           │   └── app/
+│           │       └── settlements/
+│           ├── components/
+│           │   └── SettlementProcessor.jsx
+│           └── services/
+│               ├── documents/
+│               └── settlements/
+│
+├── services/
+│   ├── api/
+│   │   ├── src/
+│   │   │   └── formwise_api/
+│   │   │       ├── settlements/
+│   │   │       │   ├── models.py
+│   │   │       │   ├── repository.py
+│   │   │       │   ├── service.py
+│   │   │       │   ├── extraction_service.py
+│   │   │       │   ├── document_extractor.py
+│   │   │       │   ├── deterministic_verifier.py
+│   │   │       │   ├── verification_service.py
+│   │   │       │   ├── evidence_matcher.py
+│   │   │       │   ├── finance_agent.py
+│   │   │       │   ├── batch_processor.py
+│   │   │       │   ├── demo_data.py
+│   │   │       │   ├── processing.py
+│   │   │       │   └── router.py
+│   │   │       ├── verification/
+│   │   │       ├── evidence/
+│   │   │       ├── audit/
+│   │   │       └── ai_provider/
+│   │   ├── tests/
+│   │   │   ├── fixtures/
+│   │   │   │   └── settlements/
+│   │   │   └── settlement tests
+│   │   └── storage/
+│   │
+│   └── worker/
+│       └── src/
+│           └── formwise_worker/
+│               └── OCR infrastructure
+│
+└── packages/
+    └── document-core/
+
+Frontend
+
+FormFinance extends the existing FormWise UI.
+
+The intended user flow is:
+
+Upload Settlement PDF
+        ↓
+Document Processing
+        ↓
+OCR Processing
+        ↓
+Settlement Extraction
+        ↓
+Verification
+        ↓
+Evidence Matching
+        ↓
+Finance Investigation
+        ↓
+Final Decision
+        ↓
+Finance Controller Dashboard
+
+The frontend displays:
+
+Settlement ID
+
+Reference
+
+Gross amount
+
+Total deductions
+
+Net amount
+
+Verification result
+
+Evidence result
+
+Final decision
+
+Confidence
+
+Reasons
+
+Processing status
+
+Audit events
+
+Individual deductions
+
+Evidence details include:
+
+Evidence found / not found
+
+Amount match
+
+Date match
+
+Reference match
+
+Overall evidence result
+
+API
+
+The settlement controller exposes endpoints including:
+
+POST /v1/settlements
+GET  /v1/settlements
+GET  /v1/settlements/{id}
+POST /v1/settlements/{id}/extract
+POST /v1/settlements/{id}/verify
+
+Document upload and OCR continue to use the existing FormWise infrastructure.
+
+Firestore Data Model
+
+Finance-specific collections include:
+
+settlements
+settlementDeductions
+verificationResults
+settlementDecisions
+evidenceLinks
+financeAuditEvents
+
+The exact schema is defined by the corresponding models and repository implementations.
+
+Testing
+
+The project includes tests covering:
+
+Settlement models and foundation
+
+Settlement extraction
+
+Deterministic verification
+
+Evidence matching
+
+Finance investigation
+
+Document processing
+
+OCR-backed processing
+
+PDF fixtures
+
+Batch processing
+
+Synthetic benchmark data
+
+Run the API tests:
+
+cd services/api
+uv run pytest -q
+
+Focused settlement tests:
+
+uv run pytest tests/test_settlements_foundation.py -v
+
+PDF fixture tests:
+
+uv run pytest tests/test_settlement_pdf_fixtures.py -v
+
+Real PaddleOCR Test
+
+The heavyweight model-backed PaddleOCR test is optional.
+
+Enable it with:
+
+FORMWISE_RUN_REAL_PADDLEOCR=1
+
+Then run the relevant OCR/PDF test suite.
+
+The normal test suite remains lightweight while the production architecture continues to use the existing PaddleOCR infrastructure.
+
+Quick Start
+
+1. Clone
+
+git clone https://github.com/jagadiswarambati/FormFinance.git
+cd FormFinance
+
+2. Install Existing Dependencies
+
+Use the existing FormWise setup and package-management workflow.
+
+FormFinance is designed to reuse the existing FormWise stack rather than introduce a separate application stack.
+
+3. Start FormWise Services
+
+Start the API, worker, frontend, and required infrastructure according to the existing FormWise project instructions.
+
+4. Open the Settlement Controller
+
+Navigate to the settlement/finance-controller section of the FormWise frontend.
+
+5. Upload a Synthetic Settlement PDF
+
+Use a fixture from:
+
+services/api/tests/fixtures/settlements/
+
+Expected flow:
+
+Upload
+→ OCR
+→ Process
+→ Extract
+→ Verify
+→ Evidence
+→ Decision
+
+Demo Scenarios
+
+Scenario 1 — Approved Settlement
+
+Use a settlement with valid financial values and matching evidence.
+
+Settlement
+    ↓
+OCR
+    ↓
+Extraction
+    ↓
+Verification PASS
+    ↓
+Evidence MATCH
+    ↓
+APPROVED
+
+Show:
+
+Gross amount
+
+Deductions
+
+Net amount
+
+Evidence match
+
+Final decision
+
+Audit trail
+
+Scenario 2 — Exception Settlement
+
+Use a settlement containing an evidence or financial mismatch.
+
+Settlement
+    ↓
+OCR
+    ↓
+Extraction
+    ↓
+Verification / Evidence Exception
+    ↓
+Investigation
+    ↓
+FLAGGED or ESCALATED
+
+Show:
+
+Mismatched field
+
+Verification result
+
+Evidence result
+
+Investigation reason
+
+Final decision
+
+Audit event
+
+This demonstrates that the controller does not simply approve every document.
+
+Design Principles
+
+Reuse Existing Infrastructure
+
+FormFinance extends FormWise rather than building a separate OCR/document platform.
+
+Deterministic Financial Controls
+
+Financial calculations and core verification rules remain deterministic and reproducible.
+
+Evidence-Based Decisions
+
+Supporting evidence is checked whenever it is available.
+
+Explainable Exceptions
+
+Finance users should be able to understand why a settlement was flagged or escalated.
+
+Failure Transparency
+
+If OCR, extraction, evidence matching, or verification cannot complete, the system exposes the failure instead of fabricating a successful result.
+
+Separation of Concerns
+
+Document processing, extraction, verification, evidence matching, investigation, persistence, and UI responsibilities are separated into focused components.
+
+Buildathon Alignment
+
+Razorpay AI Buildathon — Track 04: AI Finance Controller
+
+FormFinance targets a finance-operations workflow centered on settlement verification and reconciliation.
+
+The core loop is:
+
+Settlement
+    ↓
+Verification
+    ↓
+Exception Detection
+    ↓
+Evidence Investigation
+    ↓
+Finance Decision
+    ↓
+Audit
+
+The 50-record synthetic benchmark provides measurable batch processing with successful cases and exceptions.
+
+The system demonstrates:
+
+Automated finance processing
+
+Deterministic financial controls
+
+Evidence-based exception handling
+
+AI-assisted finance investigation
+
+Explainable decisions
+
+Auditability
+
+Batch-level metrics
+
+Current Implementation Status
+
+The project contains the major backend and frontend building blocks for the settlement-controller workflow.
+
+Implemented areas include:
+
+Settlement models
+
+Settlement persistence
+
+Settlement extraction
+
+Deduction extraction
+
+Deterministic verification
+
+Evidence matching
+
+OCR-backed document processing
+
+Finance investigation logic
+
+Audit events
+
+Batch processing
+
+50-record synthetic benchmark
+
+Synthetic settlement PDFs
+
+OCR-backed evidence fixtures
+
+Settlement API
+
+Settlement frontend integration
+
+Settlement controller interface
+
+Processing metrics
+
+Before submission, run the complete relevant test suite and perform the real browser-based demo flow.
+
+Limitations
+
+FormFinance is a buildathon prototype, not a production financial reconciliation platform.
+
+Important limitations:
+
+Synthetic data is used for benchmark and demo scenarios.
+
+OCR quality depends on the underlying document and OCR pipeline.
+
+Evidence matching depends on available evidence documents and extracted fields.
+
+AI investigation is backed by explicit finance tools and deterministic logic; claims of fully autonomous LLM behavior should only be made if a live LLM/tool-calling path is actually enabled.
+
+Production deployment would require additional security, monitoring, permissions, scalability, reliability, and financial-system integrations.
+
+Data and Security
+
+Do not commit:
+
+.env
+credentials
+service-account files
+runtime storage
+customer financial documents
+generated secrets
+
+Synthetic fixtures belong under:
+
+services/api/tests/fixtures/settlements/
+
+Runtime storage should remain ignored by Git.
+
+Development Commands
+
+Run API tests:
+
+cd services/api
+uv run pytest -q
+
+Validate Git whitespace:
+
+git diff --check
+
+Run the dedicated 50-record benchmark using the benchmark test included in the settlement test suite.
+
+Project Goal
+
+The goal of FormFinance is not merely to extract settlement information.
+
+The goal is to build a finance controller that can:
+
+READ
+  ↓
+UNDERSTAND
+  ↓
+VERIFY
+  ↓
+COMPARE WITH EVIDENCE
+  ↓
+INVESTIGATE EXCEPTIONS
+  ↓
+DECIDE
+  ↓
+EXPLAIN
+  ↓
+AUDIT
+
+This turns document processing into an actionable finance-operations workflow.
+
+Summary
+
+FormFinance = FormWise + AI-assisted Finance Control
+
+It combines:
+
+Existing FormWise document infrastructure
+
+PaddleOCR
+
+Settlement extraction
+
+Deduction analysis
+
+Deterministic financial verification
+
+Evidence matching
+
+Finance investigation
+
+Final decisioning
+
+Audit trails
+
+Batch processing
+
+50-record synthetic benchmarking
+
+Finance-controller UI
+
+Central workflow:
+
+PDF
+→ OCR
+→ Settlement
+→ Deductions
+→ Verification
+→ Evidence
+→ Investigation
+→ Decision
+→ Audit
+→ Metrics
+
+Repository
+
+GitHub: https://github.com/jagadiswarambati/FormFinance
+
+Project: FormFinance
+Buildathon: Razorpay AI Buildathon 2026
+Track: Track 04 — AI Finance Controller
+
+Final Demo Checklist
+
+Before submission:
+
+Frontend starts successfully
+
+Backend starts successfully
+
+Worker/OCR service starts successfully
+
+Settlement PDF uploads successfully
+
+Real OCR processing completes
+
+Stored OCR is consumed by settlement processing
+
+Settlement fields are extracted
+
+Deductions are persisted
+
+Verification runs successfully
+
+Evidence matching works
+
+Approved case produces APPROVED
+
+Exception case produces FLAGGED/ESCALATED
+
+Reasons are visible
+
+Audit events are visible
+
+Batch benchmark runs
+
+50-record metrics are available
+
+No runtime storage is committed
+
+No secrets are committed
+
+git diff --check passes
+
+Relevant tests pass
+
+FormFinance
+
+From settlement document to finance decision.
