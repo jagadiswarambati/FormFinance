@@ -1,6 +1,6 @@
 'use client';
 
-import { ChartNoAxesCombined, FileText, Home, Menu, Settings, Upload, WalletCards, X } from 'lucide-react';
+import { ChartNoAxesCombined, Home, Menu, Settings, WalletCards, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,6 @@ const items = [
   { href: '/app', label: 'Dashboard', icon: Home },
   { href: '/app/settlements', label: 'Settlements', icon: WalletCards },
   { href: '/app/history', label: 'Batch Results', icon: ChartNoAxesCombined },
-  { href: '/app/upload', label: 'Documents', icon: Upload },
-  { href: '/app/forms', label: 'All Documents', icon: FileText },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ];
 
