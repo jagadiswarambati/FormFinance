@@ -15,6 +15,10 @@ class LocalOcrResultStore:
         path.write_text(text, encoding="utf-8")
         return str(path)
 
+    def read(self, storage_key: str) -> str:
+        """Read an OCR result previously written by this store."""
+        return Path(storage_key).read_text(encoding="utf-8")
+
     def write_layout(self, document_id: str, tokens: tuple[OcrLayoutToken, ...]) -> str:
         self._directory.mkdir(parents=True, exist_ok=True)
         path = self._directory / f"{document_id}.layout.json"

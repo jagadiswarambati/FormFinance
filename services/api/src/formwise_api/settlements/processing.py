@@ -33,6 +33,7 @@ from formwise_api.audit.repository import FinanceAuditEventRepository
 from formwise_api.audit.finance_audit_events import FinanceAuditEvent
 from formwise_api.documents.repository import DocumentRepository
 from formwise_api.evidence.repository import EvidenceLinkRepository
+from formwise_worker.ocr.store import LocalOcrResultStore
 
 
 class SettlementProcessingPipeline:
@@ -135,16 +136,32 @@ class SettlementProcessingPipeline:
         
         # STAGE 2: Extract settlement from document
         if ocr_text is None and document.ocr_text_storage_key:
-            # In production: Load OCR text from storage
-            # For now: Use document's OCR status as indicator
             if document.ocr_status != "completed":
                 return {
                     "error": "Document OCR not completed",
                     "status": "pending_ocr",
                     "document_id": document_id,
                 }
-            # TODO: Load actual OCR text from ocr_text_storage_key
-            ocr_text = f"[OCR text from {document.ocr_text_storage_key}]"
+            try:
+                ocr_text = LocalOcrResultStore("").read(document.ocr_text_storage_key)
+            except (OSError, UnicodeError):
+                return {
+                    "error": "Document OCR result is unavailable",
+                    "status": "ocr_unavailable",
+                    "document_id": document_id,
+                }
+            if not ocr_text.strip():
+                return {
+                    "error": "Document OCR result is empty",
+                    "status": "ocr_unavailable",
+                    "document_id": document_id,
+                }
+        elif ocr_text is None:
+            return {
+                "error": "Document OCR has not produced a result",
+                "status": "pending_ocr",
+                "document_id": document_id,
+            }
         
         extraction_result = self._extractor.extract_from_document(
             document_id=document_id,
@@ -177,6 +194,13 @@ class SettlementProcessingPipeline:
         self._settlement_repo.create(settlement)
         for deduction in deductions:
             self._deduction_repo.create(deduction)
+        self._settlement_repo.update(
+            settlement.id,
+            {
+                "status": "processing",
+                "deductionIds": [deduction.id for deduction in deductions],
+            },
+        )
         
         # STAGE 3: Link evidence documents
         if evidence_document_ids:
@@ -203,7 +227,7 @@ class SettlementProcessingPipeline:
         if decision:
             result = {
                 "settlement_id": settlement.id,
-                "status": decision.decision,
+                "status": decision.final_decision,
                 "gross_amount": settlement.gross_amount,
                 "net_amount": settlement.net_amount,
                 "deductions": [
@@ -216,9 +240,9 @@ class SettlementProcessingPipeline:
                     for d in deductions
                 ],
                 "decision": {
-                    "status": decision.decision,
+                    "status": decision.final_decision,
                     "confidence": decision.confidence,
-                    "explanation": decision.explanation,
+                    "explanation": decision.reason,
                     "timestamp": decision.created_at.isoformat() if decision.created_at else None,
                 },
                 "document_id": document_id,
@@ -260,7 +284,7 @@ class SettlementProcessingPipeline:
                     resource_type="settlement",
                     resource_id=settlement.id,
                     details={
-                        "decision": decision.decision,
+                        "decision": decision.final_decision,
                         "confidence": decision.confidence,
                         "deduction_count": len(deductions),
                     },
@@ -305,9 +329,9 @@ class SettlementProcessingPipeline:
                 for d in deductions
             ],
             "decision": {
-                "status": decision.decision,
+                "status": decision.final_decision,
                 "confidence": decision.confidence,
-                "explanation": decision.explanation,
+                "explanation": decision.reason,
                 "timestamp": decision.created_at.isoformat() if decision.created_at else None,
             },
         }
