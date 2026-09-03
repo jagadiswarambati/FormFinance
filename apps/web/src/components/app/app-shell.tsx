@@ -1,25 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/auth-context';
+import { useState } from 'react';
 import { AppHeader } from '@/components/app/app-header';
 import { AppSidebar } from '@/components/app/app-sidebar';
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { isAuthenticated, isLoading } = useAuth();
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace('/');
-  }, [isAuthenticated, isLoading, router]);
-  if (isLoading || !isAuthenticated)
-    return (
-      <main className="grid min-h-screen place-items-center text-sm text-slate-500">
-        Loading FormWise AI…
-      </main>
-    );
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-900 dark:text-slate-50">
       <AppSidebar
