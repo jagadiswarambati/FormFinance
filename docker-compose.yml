@@ -11,6 +11,7 @@ services:
         NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
         NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+        NEXT_PUBLIC_DEMO_AUTH_ENABLED: ${NEXT_PUBLIC_DEMO_AUTH_ENABLED}
     ports: ['3000:3000']
     environment: { NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1 }
     depends_on: [api]
@@ -20,6 +21,7 @@ services:
     env_file: .env
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
+      DEMO_AUTH_ENABLED: ${DEMO_AUTH_ENABLED:-false}
     volumes:
       - upload-artifacts:/app/storage/uploads
       - quarantine-artifacts:/app/storage/quarantine
