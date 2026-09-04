@@ -31,3 +31,18 @@ class FirestoreEvidenceLinkRepository:
             .order_by("matchedAt")
             .stream()
         ]
+
+
+class InMemoryEvidenceLinkRepository:
+    def __init__(self) -> None:
+        self._links: dict[str, EvidenceLink] = {}
+
+    def create(self, link: EvidenceLink) -> str:
+        self._links[link.id] = link
+        return link.id
+
+    def get(self, link_id: str) -> EvidenceLink | None:
+        return self._links.get(link_id)
+
+    def list_for_deduction(self, deduction_id: str) -> list[EvidenceLink]:
+        return [l for l in self._links.values() if l.deduction_id == deduction_id]
