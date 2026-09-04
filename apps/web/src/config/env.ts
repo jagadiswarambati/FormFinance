@@ -8,6 +8,7 @@ const schema = z.object({
   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: z.string().min(1).optional(),
   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string().min(1).optional(),
   NEXT_PUBLIC_FIREBASE_APP_ID: z.string().min(1).optional(),
+  NEXT_PUBLIC_DEMO_AUTH_ENABLED: z.string().optional(),
 });
 
 export const env = schema.parse({
@@ -19,7 +20,11 @@ export const env = schema.parse({
   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  NEXT_PUBLIC_DEMO_AUTH_ENABLED: process.env.NEXT_PUBLIC_DEMO_AUTH_ENABLED,
 });
+
+/** True only when explicitly opted in. Must mirror the backend's DEMO_AUTH_ENABLED. */
+export const demoAuthEnabled = env.NEXT_PUBLIC_DEMO_AUTH_ENABLED === 'true';
 
 export const firebaseEnvironment = {
   apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY,
