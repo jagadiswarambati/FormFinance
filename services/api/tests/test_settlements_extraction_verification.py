@@ -15,7 +15,7 @@ from formwise_api.verification.repository import (
 from formwise_api.settlements.extraction_service import SettlementExtractionService
 from formwise_api.settlements.verification_service import SettlementVerificationService
 from formwise_api.audit.repository import FirestoreFinanceAuditEventRepository
-from tests.synthetic_data import (
+from synthetic_data import (
     generate_synthetic_settlements,
     get_settlement_test_data,
 )
