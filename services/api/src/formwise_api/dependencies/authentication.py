@@ -12,18 +12,26 @@ from formwise_api.authentication.firebase import (
 from formwise_api.authentication.models import AuthenticatedIdentity
 from formwise_api.authentication.repository import (
     FirestoreUserRepository,
+    InMemoryUserRepository,
     UserRepository,
 )
 from formwise_api.config import Settings, get_settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
 logger = structlog.get_logger()
+_in_memory_user_repository = InMemoryUserRepository()
 
 
 def get_user_repository(
     settings: Settings = Depends(get_settings),
 ) -> UserRepository:
-    return FirestoreUserRepository(get_firestore_client(), settings)
+    if settings.demo_auth_enabled:
+        return _in_memory_user_repository
+    try:
+        return FirestoreUserRepository(get_firestore_client(), settings)
+    except Exception:
+        return _in_memory_user_repository
+
 
 
 def get_authenticated_identity(
