@@ -7,7 +7,7 @@ Processes multiple settlements end-to-end:
 4. Aggregate results with metrics
 """
 
-from typing import Optional
+from typing import Any, Optional
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from uuid import uuid4
@@ -30,18 +30,18 @@ class BatchMetrics:
     successfully_extracted: int = 0
     total_settlements: int = 0
     total_deductions: int = 0
-    
+
     # Settlement outcomes
     approved_count: int = 0
     flagged_count: int = 0
     escalated_count: int = 0
     processing_failed_count: int = 0
-    
+
     # Deduction verification stats
     verified_deductions: int = 0
     disputed_deductions: int = 0
     unverifiable_deductions: int = 0
-    
+
     # Rates
     settlement_approval_rate: float = 0.0
     deduction_verification_rate: float = 0.0
@@ -51,17 +51,17 @@ class BatchMetrics:
     exception_count: int = 0
     exception_rate: float = 0.0
     extraction_success_rate: float = 0.0
-    
+
     # AI agent usage
     agent_investigations: int = 0
     agent_successes: int = 0
     agent_failures: int = 0
-    
+
     # Results
-    exceptions: list[dict] = field(default_factory=list)
-    settlement_results: list[dict] = field(default_factory=list)
-    
-    def to_dict(self):
+    exceptions: list[dict[str, Any]] = field(default_factory=list)
+    settlement_results: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -73,25 +73,25 @@ class SettlementProcessResult:
     owner_uid: str
     source: str
     status: str  # approved, flagged, escalated, error
-    
+
     # Counts
     deduction_count: int = 0
     verified_count: int = 0
     disputed_count: int = 0
     unverifiable_count: int = 0
-    
+
     # Decision details
     decision: Optional[SettlementDecision] = None
     error: Optional[str] = None
-    
+
     # Workflow stages
     extraction_succeeded: bool = False
     verification_succeeded: bool = False
     extraction_deduction_count: int = 0
     evidence_checked: bool = False
     evidence_matched: bool = False
-    
-    def to_dict(self):
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, handling decision object."""
         d = asdict(self)
         if self.decision:
@@ -108,7 +108,7 @@ class SettlementProcessResult:
 
 class BatchSettlementProcessor:
     """Process multiple settlements end-to-end."""
-    
+
     def __init__(
         self,
         settlement_service: SettlementService,
@@ -122,21 +122,21 @@ class BatchSettlementProcessor:
         self._verification_service = verification_service
         self._settlement_repo = settlement_repo
         self._extraction_service = extraction_service
-    
+
     def process_settlements(
         self,
         owner_uid: str,
-        settlement_specs: list[dict],
+        settlement_specs: list[dict[str, Any]],
     ) -> tuple[BatchMetrics, list[SettlementProcessResult]]:
         """
         Process a batch of settlements end-to-end.
-        
+
         Args:
             owner_uid: User ID
             settlement_specs: List of settlement spec dicts with:
                 - source, settlement_date, gross_amount, net_amount, currency
                 - ocr_text (for document extraction)
-        
+
         Returns:
             (BatchMetrics, list of SettlementProcessResult)
         """
@@ -145,17 +145,17 @@ class BatchSettlementProcessor:
             total_settlements=len(settlement_specs),
         )
         results = []
-        
+
         for spec in settlement_specs:
             result = self._process_single_settlement(owner_uid, spec)
             results.append(result)
-            
+
             metrics.processed += result.status != "error"
             metrics.successfully_extracted += result.extraction_succeeded
             metrics.total_deductions += result.deduction_count
             metrics.evidence_checked += result.evidence_checked
             metrics.evidence_matched += result.evidence_matched
-            
+
             if result.status == "approved":
                 metrics.approved_count += 1
             elif result.status == "flagged":
@@ -164,17 +164,17 @@ class BatchSettlementProcessor:
                 metrics.escalated_count += 1
             else:
                 metrics.processing_failed_count += 1
-            
+
             if result.verified_count:
                 metrics.verified_deductions += result.verified_count
             if result.disputed_count:
                 metrics.disputed_deductions += result.disputed_count
             if result.unverifiable_count:
                 metrics.unverifiable_deductions += result.unverifiable_count
-            
+
             # Add to results
             metrics.settlement_results.append(result.to_dict())
-            
+
             # Track exceptions
             if result.status in ("flagged", "escalated"):
                 metrics.exception_count += 1
@@ -184,13 +184,13 @@ class BatchSettlementProcessor:
                     "reason": result.decision.reason if result.decision else result.error,
                     "gaps": result.decision.gaps_identified if result.decision else [],
                 })
-        
+
         # Calculate rates
         if metrics.total_records > 0:
             metrics.settlement_approval_rate = metrics.approved_count / metrics.total_records
             metrics.exception_rate = metrics.exception_count / metrics.total_records
             metrics.extraction_success_rate = metrics.successfully_extracted / metrics.total_records
-        
+
         if metrics.total_deductions > 0:
             metrics.deduction_verification_rate = (
                 metrics.verified_deductions / metrics.total_deductions
@@ -200,7 +200,7 @@ class BatchSettlementProcessor:
 
         return metrics, results
 
-    def _persist_deductions(self, settlement_id: str, deduction_data: list[dict]) -> list[SettlementDeduction]:
+    def _persist_deductions(self, settlement_id: str, deduction_data: list[dict[str, Any]]) -> list[SettlementDeduction]:
         if self._extraction_service:
             deductions = self._extraction_service.extract_from_structured_data(settlement_id, deduction_data)
             self._extraction_service.complete_extraction(settlement_id)
@@ -224,11 +224,11 @@ class BatchSettlementProcessor:
             {"status": "processing", "deductionIds": [deduction.id for deduction in deductions]},
         )
         return deductions
-    
+
     def _process_single_settlement(
         self,
         owner_uid: str,
-        spec: dict,
+        spec: dict[str, Any],
     ) -> SettlementProcessResult:
         """Process a single settlement with OCR extraction."""
 
@@ -259,6 +259,13 @@ class BatchSettlementProcessor:
             deductions = self._persist_deductions(settlement_id, deduction_data)
             extraction_succeeded = bool(spec.get("ocr_text") or spec.get("deductions") is not None)
 
+            if spec.get("evidence"):
+                store = getattr(self._verification_service, "_evidence_store", None)
+                if store:
+                    for d in deductions:
+                        for item in spec["evidence"]:
+                            store.register_evidence(d.id, item.get("type", "document"), item.get("data", {}))
+
             decision = self._verification_service.verify_settlement(settlement_id)
             stored_settlement = self._settlement_service.get_settlement(settlement_id)
             if not stored_settlement or not decision:
@@ -274,21 +281,26 @@ class BatchSettlementProcessor:
                 )
 
             summary = decision.verification_summary or {}
+            verified_c = summary.get("verified", 0)
+            disputed_c = summary.get("disputed", 0)
+            unverifiable_c = summary.get("unverifiable", 0)
+            is_matched = bool(spec.get("evidence_matched")) if "evidence_matched" in spec else (verified_c > 0 and disputed_c == 0 and unverifiable_c == 0)
+
             return SettlementProcessResult(
                 settlement_id=settlement_id,
                 owner_uid=owner_uid,
                 source=stored_settlement.source,
                 status={"approve": "approved", "flag": "flagged", "escalate": "escalated"}.get(decision.final_decision, "error"),
                 deduction_count=len(deductions),
-                verified_count=summary.get("verified", 0),
-                disputed_count=summary.get("disputed", 0),
-                unverifiable_count=summary.get("unverifiable", 0),
+                verified_count=verified_c,
+                disputed_count=disputed_c,
+                unverifiable_count=unverifiable_c,
                 decision=decision,
                 extraction_succeeded=extraction_succeeded,
                 verification_succeeded=True,
                 extraction_deduction_count=len(deductions),
-                evidence_checked=bool(spec.get("evidence_checked", False)),
-                evidence_matched=bool(spec.get("evidence_matched", False)),
+                evidence_checked=bool(spec.get("evidence_checked", bool(deductions))),
+                evidence_matched=is_matched,
             )
 
         except Exception as error:
@@ -299,28 +311,3 @@ class BatchSettlementProcessor:
                 status="error",
                 error=str(error),
             )
-
-    def _persist_deductions(self, settlement_id: str, deduction_data: list[dict]) -> list[SettlementDeduction]:
-        if self._extraction_service:
-            deductions = self._extraction_service.extract_from_structured_data(settlement_id, deduction_data)
-            self._extraction_service.complete_extraction(settlement_id)
-            return deductions
-
-        deductions = []
-        for data in deduction_data:
-            deduction = SettlementDeduction(
-                settlement_id=settlement_id,
-                type=data["type"],
-                description=data["description"],
-                amount=float(data["amount"]),
-                reference_id=data.get("reference_id"),
-                reference_date=data.get("reference_date"),
-                extracted_with_confidence=float(data.get("confidence", 0.95)),
-            )
-            deduction.id = self._settlement_service.create_deduction(deduction)
-            deductions.append(deduction)
-        self._settlement_service.update_settlement(
-            settlement_id,
-            {"status": "processing", "deductionIds": [deduction.id for deduction in deductions]},
-        )
-        return deductions
