@@ -48,14 +48,31 @@ def test_complete_end_to_end_workflow():
     print("END-TO-END SETTLEMENT PROCESSING WORKFLOW TEST")
     print("=" * 80)
     
-    # Initialize pipeline with mocks
+    # Initialize pipeline with stateful mocks
     print("\n[SETUP] Initializing settlement processing pipeline...")
+    settlement_store = {}
+    deduction_store = {}
+    decision_store = {}
+
+    mock_settlement_repo = Mock()
+    mock_settlement_repo.create.side_effect = lambda s: (settlement_store.update({s.id: s}) or s.id)
+    mock_settlement_repo.get.side_effect = lambda sid: settlement_store.get(sid)
+
+    mock_deduction_repo = Mock()
+    mock_deduction_repo.create.side_effect = lambda d: (deduction_store.setdefault(d.settlement_id, []).append(d) or d.id)
+    mock_deduction_repo.list_for_settlement.side_effect = lambda sid: deduction_store.get(sid, [])
+
+    mock_decision_repo = Mock()
+    mock_decision_repo.create.side_effect = lambda d: (decision_store.update({d.id: d}) or d.id)
+    mock_decision_repo.get.side_effect = lambda did: decision_store.get(did)
+    mock_decision_repo.get_by_settlement.side_effect = lambda sid: next((d for d in decision_store.values() if d.settlement_id == sid), None)
+
     pipeline = SettlementProcessingPipeline(
         document_repo=Mock(),
-        settlement_repo=Mock(),
-        deduction_repo=Mock(),
+        settlement_repo=mock_settlement_repo,
+        deduction_repo=mock_deduction_repo,
         verification_repo=Mock(),
-        decision_repo=Mock(),
+        decision_repo=mock_decision_repo,
         evidence_repo=Mock(),
         audit_repo=Mock(),
     )
