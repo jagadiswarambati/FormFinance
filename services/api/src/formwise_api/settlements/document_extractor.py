@@ -2,7 +2,7 @@
 
 import re
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 from formwise_api.documents.repository import DocumentRepository
 from formwise_api.documents.models import DocumentResponse
 from formwise_api.settlements.models import Settlement, SettlementDeduction
@@ -12,7 +12,7 @@ from formwise_api.audit.repository import FinanceAuditEventRepository
 
 class DocumentSettlementExtractor:
     """Extracts settlement information from FormWise documents.
-    
+
     Workflow:
     1. Load document from DocumentRepository
     2. Retrieve OCR-extracted text
@@ -20,7 +20,7 @@ class DocumentSettlementExtractor:
     4. Create Settlement and SettlementDeduction records
     5. Log extraction events
     """
-    
+
     def __init__(
         self,
         document_repo: DocumentRepository,
@@ -28,7 +28,7 @@ class DocumentSettlementExtractor:
     ):
         self._document_repo = document_repo
         self._audit_repo = audit_repo
-    
+
     def extract_from_document(
         self,
         document_id: str,
@@ -37,31 +37,31 @@ class DocumentSettlementExtractor:
     ) -> Optional[tuple[Settlement, list[SettlementDeduction]]]:
         """
         Extract settlement from FormWise document.
-        
+
         Args:
             document_id: Document ID in FormWise
             owner_uid: Owner user ID
             ocr_text: OCR text (if already extracted; otherwise will use document's OCR)
-            
+
         Returns:
             (Settlement, [SettlementDeduction]) or None if extraction fails
         """
         # Load document from FormWise
         document = self._document_repo.get_for_owner(document_id, owner_uid)
-        if not document:
+        if not document and not ocr_text:
             return None
-        
+
         # Get OCR text
         if ocr_text is None:
             # TODO (production): Load from ocr_text_storage_key
             # For now, return None if no text provided
             return None
-        
+
         # Parse settlement from OCR text
         settlement_data = self._parse_settlement_data(ocr_text)
         if not settlement_data:
             return None
-        
+
         # Create Settlement
         settlement = Settlement(
             id=document_id,  # Use document ID as settlement ID
@@ -72,7 +72,7 @@ class DocumentSettlementExtractor:
             net_amount=settlement_data.get("net_amount", 0.0),
             currency=settlement_data.get("currency", "INR"),
         )
-        
+
         # Create deductions
         deductions = []
         for deduction_data in settlement_data.get("deductions", []):
@@ -86,7 +86,7 @@ class DocumentSettlementExtractor:
                 extracted_with_confidence=deduction_data.get("confidence", 0.85),
             )
             deductions.append(deduction)
-        
+
         # Log extraction event
         self._audit_repo.create(
             FinanceAuditEvent(
@@ -102,23 +102,23 @@ class DocumentSettlementExtractor:
                 },
             )
         )
-        
+
         return settlement, deductions
 
-    def extract_deductions(self, ocr_text: str) -> list[dict]:
+    def extract_deductions(self, ocr_text: str) -> list[dict[str, Any]]:
         """Extract normalized deduction data from OCR text for a caller to persist."""
         return self._extract_deductions(ocr_text)
-    
-    def _parse_settlement_data(self, ocr_text: str) -> Optional[dict]:
+
+    def _parse_settlement_data(self, ocr_text: str) -> Optional[dict[str, Any]]:
         """
         Parse settlement structure from OCR text.
-        
+
         Looks for common patterns in Razorpay/Stripe/PayPal statements.
         """
         if not ocr_text or len(ocr_text) < 50:
             return None
-        
-        data = {
+
+        data: dict[str, Any] = {
             "source": "other",
             "settlement_date": date.today(),
             "gross_amount": 0.0,
@@ -126,7 +126,7 @@ class DocumentSettlementExtractor:
             "currency": "INR",
             "deductions": [],
         }
-        
+
         # Determine source from text
         text_lower = ocr_text.lower()
         if "razorpay" in text_lower:
@@ -135,15 +135,15 @@ class DocumentSettlementExtractor:
             data["source"] = "stripe"
         elif "paypal" in text_lower:
             data["source"] = "paypal"
-        
+
         # Extract amounts - try multiple patterns
         amount_patterns = [
-            r"gross[:\s]+(?:INR|₹|Rs\.?|\$|USD)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"gross\s*(?:volume|revenue|amount)?[:\s]*(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"gross[:\s]+(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
             r"total\s+revenue\s*:\s*(?:INR|₹|Rs\.?|\$|USD|EUR)?\s*(\d+(?:,\d+)*(?:\.\d{2})?)",
-            r"gross\s*amount[:\s]*(?:INR|₹|Rs\.?|\$|USD)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
-            r"total\s*amount[:\s]*(?:INR|₹|Rs\.?|\$|USD)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"total\s*amount[:\s]*(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
         ]
-        
+
         for pattern in amount_patterns:
             matches = re.findall(pattern, ocr_text, re.IGNORECASE)
             if matches:
@@ -154,15 +154,15 @@ class DocumentSettlementExtractor:
                     break
                 except ValueError:
                     continue
-        
+
         # Extract net amount
         net_patterns = [
-            r"net\s*(?:amount|payout)[:\s]*(?:INR|₹|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
-            r"settlement\s*amount[:\s]*(?:INR|₹|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
-            r"total\s*payout[:\s]*(?:INR|₹|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
-            r"net[:\s]*(?:INR|₹|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"net\s*(?:amount|payout)[:\s]*(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"settlement\s*amount[:\s]*(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"total\s*payout[:\s]*(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
+            r"net[:\s]*(?:INR|₹|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)",
         ]
-        
+
         for pattern in net_patterns:
             matches = re.findall(pattern, ocr_text, re.IGNORECASE)
             if matches:
@@ -172,33 +172,36 @@ class DocumentSettlementExtractor:
                     break
                 except ValueError:
                     continue
-        
+
         # Extract currency
         if "USD" in ocr_text or "$" in ocr_text:
             data["currency"] = "USD"
         elif "EUR" in ocr_text or "€" in ocr_text:
             data["currency"] = "EUR"
-        
+
         # Extract deductions
         data["deductions"] = self._extract_deductions(ocr_text)
-        
-        return data if data["gross_amount"] > 0 else None
-    
-    def _extract_deductions(self, ocr_text: str) -> list[dict]:
+
+        gross = data.get("gross_amount")
+        if isinstance(gross, (int, float)) and gross > 0:
+            return data
+        return None
+
+    def _extract_deductions(self, ocr_text: str) -> list[dict[str, Any]]:
         """Extract individual deductions from OCR text."""
-        deductions = []
-        
+        deductions: list[dict[str, Any]] = []
+
         # Patterns for common deduction types
         deduction_patterns = [
-            (r"chargeback[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "chargeback"),
-            (r"(?:refund|refunds)[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "refund"),
-            (r"(?:fee|fees)[s]?[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "fee"),
-            (r"hold[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "hold"),
-            (r"reserve[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "hold"),
-            (r"dispute[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "chargeback"),
-            (r"adjustment[:\s]*(?:₹|INR|Rs\.?|\$)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "other"),
+            (r"chargeback(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "chargeback"),
+            (r"(?:refund|refunds)(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "refund"),
+            (r"(?:fee|fees)[s]?(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "fee"),
+            (r"hold(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "hold"),
+            (r"reserve(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "hold"),
+            (r"dispute(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "chargeback"),
+            (r"adjustment(?:\s*\([^)]*\))?[:\s]*(?:₹|INR|Rs\.?|\$|USD|EUR)?[\s]*(\d+(?:,\d+)*(?:\.\d{2})?)", "other"),
         ]
-        
+
         for pattern, dtype in deduction_patterns:
             matches = re.finditer(pattern, ocr_text, re.IGNORECASE)
             for match in matches:
@@ -216,5 +219,5 @@ class DocumentSettlementExtractor:
                         })
                 except ValueError:
                     continue
-        
+
         return deductions
