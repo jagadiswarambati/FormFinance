@@ -1,7 +1,7 @@
 from typing import Any
 
 import structlog
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
@@ -28,9 +28,23 @@ def get_user_repository(
 
 def get_authenticated_identity(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    x_demo_user_id: str | None = Header(default=None, alias="X-Demo-User-ID"),
+    settings: Settings = Depends(get_settings),
 ) -> AuthenticatedIdentity:
 
     if credentials is None or credentials.scheme.lower() != "bearer":
+        # Demo-only bypass: only reachable when DEMO_AUTH_ENABLED=true (never
+        # true in production, enforced by Settings.validate_security_configuration)
+        # and only when no real bearer token was presented, so a configured
+        # Firebase token always takes precedence over the demo header.
+        if settings.demo_auth_enabled and x_demo_user_id:
+            logger.info("authentication_demo_mode_used", uid=x_demo_user_id)
+            return AuthenticatedIdentity(
+                uid=x_demo_user_id,
+                display_name="Demo User",
+                email=f"{x_demo_user_id}@demo.formfinance.local",
+                photo_url=None,
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication is required.",
