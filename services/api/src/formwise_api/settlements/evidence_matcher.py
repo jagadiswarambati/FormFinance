@@ -2,10 +2,11 @@
 
 import re
 from datetime import date, datetime
+from typing import Any
 from formwise_api.settlements.models import Settlement, SettlementDeduction
 from formwise_api.settlements.deterministic_verifier import DeterministicVerifier
-from formwise_api.verification.models import VerificationResult
-from formwise_api.evidence.models import EvidenceLink, EvidenceLinkStatus
+from formwise_api.verification.models import DeductionVerificationStatus, VerificationResult
+from formwise_api.evidence.models import EvidenceLink
 from formwise_api.evidence.repository import EvidenceLinkRepository
 from formwise_api.privacy.storage import LocalPrivacyTextStore
 
@@ -13,11 +14,11 @@ from formwise_api.privacy.storage import LocalPrivacyTextStore
 class SettlementEvidenceStore:
     """Evidence store - can use DocumentRepository or mock."""
     
-    def __init__(self, document_repo=None):
-        self.evidence_database = {}
+    def __init__(self, document_repo: Any = None) -> None:
+        self.evidence_database: dict[str, list[dict[str, Any]]] = {}
         self._document_repo = document_repo
     
-    def register_evidence(self, deduction_id: str, evidence_type: str, evidence_data: dict):
+    def register_evidence(self, deduction_id: str, evidence_type: str, evidence_data: dict[str, Any]) -> None:
         """Register evidence for a deduction (for testing)."""
         if deduction_id not in self.evidence_database:
             self.evidence_database[deduction_id] = []
@@ -26,7 +27,7 @@ class SettlementEvidenceStore:
             "data": evidence_data
         })
     
-    def link_evidence_document(self, deduction_id: str, document_id: str, match_type: str):
+    def link_evidence_document(self, deduction_id: str, document_id: str, match_type: str) -> None:
         """Link a document as evidence for a deduction."""
         if deduction_id not in self.evidence_database:
             self.evidence_database[deduction_id] = []
@@ -35,7 +36,7 @@ class SettlementEvidenceStore:
             "data": {"document_id": document_id, "match_type": match_type}
         })
     
-    def find_evidence_for_deduction(self, deduction: SettlementDeduction, owner_uid: str = None) -> list[dict]:
+    def find_evidence_for_deduction(self, deduction: SettlementDeduction, owner_uid: str | None = None) -> list[dict[str, Any]]:
         """Find evidence documents matching deduction criteria."""
         # First check registered evidence (test data)
         evidence = self.evidence_database.get(deduction.id, [])
@@ -53,18 +54,21 @@ class SettlementEvidenceStore:
         
         return evidence
 
-    def get_ocr_text(self, evidence_item: dict) -> str | None:
+    def get_ocr_text(self, evidence_item: dict[str, Any]) -> str | None:
         """Load OCR text for a candidate evidence item from FormWise storage."""
         data = evidence_item.get("data", {})
-        if isinstance(data.get("ocr_text"), str):
+        if isinstance(data, dict) and isinstance(data.get("ocr_text"), str):
             return data["ocr_text"]
+
+        if not isinstance(data, dict):
+            return None
 
         document_id = data.get("document_id")
         if not document_id or not self._document_repo:
             return None
 
         document = self._document_repo.get_for_owner(document_id, data.get("owner_uid"))
-        if not document or document.ocr_status != "completed" or not document.ocr_text_storage_key:
+        if not document or getattr(document, "ocr_status", None) != "completed" or not getattr(document, "ocr_text_storage_key", None):
             return None
 
         try:
@@ -72,12 +76,12 @@ class SettlementEvidenceStore:
         except (OSError, UnicodeError):
             return None
 
-    def _query_formwise_documents(self, deduction: SettlementDeduction, owner_uid: str) -> list[dict]:
+    def _query_formwise_documents(self, deduction: SettlementDeduction, owner_uid: str) -> list[dict[str, Any]]:
         """Query FormWise DocumentRepository for matching evidence."""
         if not self._document_repo:
             return []
         
-        evidence_results = []
+        evidence_results: list[dict[str, Any]] = []
         
         # Get all documents for this owner
         try:
@@ -109,7 +113,7 @@ class SettlementEvidenceStore:
         
         return evidence_results
 
-    def _get_match_type(self, deduction: SettlementDeduction, doc) -> str | None:
+    def _get_match_type(self, deduction: SettlementDeduction, doc: Any) -> str | None:
         """Determine if a document matches the deduction."""
         deduction_type = deduction.type.lower()
         filename = doc.original_filename.lower() if hasattr(doc, 'original_filename') else ""
@@ -130,7 +134,7 @@ class SettlementEvidenceStore:
 class EvidenceMatcher:
     """Matches deductions against available evidence."""
     
-    def __init__(self, evidence_repo: EvidenceLinkRepository, evidence_store: SettlementEvidenceStore | None = None):
+    def __init__(self, evidence_repo: EvidenceLinkRepository, evidence_store: SettlementEvidenceStore | None = None) -> None:
         self._evidence_repo = evidence_repo
         self._evidence_store = evidence_store or SettlementEvidenceStore()
         self._verifier = DeterministicVerifier()
@@ -155,18 +159,18 @@ class EvidenceMatcher:
             # No evidence found
             return (
                 VerificationResult(
-                    deduction_id=deduction.id,
-                    settlement_id=deduction.settlement_id,
+                    deductionId=deduction.id,
+                    settlementId=deduction.settlement_id,
                     status="unverifiable",
                     reason="No supporting evidence found",
-                    evidence_match={"evidence_found": False},
+                    evidenceMatch={"evidence_found": False},
                 ),
                 None,
             )
         
         # Evaluate every candidate's financial fields; discovery metadata alone is not proof.
-        best_match = None
-        best_result = None
+        best_match: dict[str, Any] | None = None
+        best_result: VerificationResult | None = None
         best_score = -1
         
         for evidence_item in evidence_items:
@@ -179,40 +183,50 @@ class EvidenceMatcher:
                 best_result = result
                 best_score = score
         
-        if best_result is None:
+        if best_result is None or best_match is None:
             return (
                 VerificationResult(
-                    deduction_id=deduction.id,
-                    settlement_id=deduction.settlement_id,
+                    deductionId=deduction.id,
+                    settlementId=deduction.settlement_id,
                     status="unverifiable",
                     reason="Evidence found but could not be matched",
-                    evidence_match={"evidence_found": True, "match_failed": True},
+                    evidenceMatch={"evidence_found": True, "match_failed": True},
                 ),
                 None,
             )
         
         # Create evidence link
+        doc_data = best_match.get("data", {}) if isinstance(best_match, dict) else {}
+        evidence_doc_id = doc_data.get("document_id", "generated") if isinstance(doc_data, dict) else "generated"
+        
         evidence_link = EvidenceLink(
-            deduction_id=deduction.id,
-            evidence_document_id=best_match.get("data", {}).get("document_id", "generated"),
-            link_confidence=float(best_result.evidence_match.get("confidence", 0.0)),
-            extracted_from_evidence=str(best_result.evidence_match.get("evidence_amount", "unknown")),
+            deductionId=deduction.id,
+            evidenceDocumentId=evidence_doc_id,
+            linkConfidence=float(best_result.evidence_match.get("confidence", 0.0)),
+            extractedFromEvidence=str(best_result.evidence_match.get("evidence_amount", "unknown")),
             status="found" if best_result.status == "verified" else "partial",
         )
         
         return best_result, evidence_link
 
-    def _evidence_fields(self, evidence_item: dict) -> dict:
-        data = evidence_item.get("data", {})
+    def _evidence_fields(self, evidence_item: dict[str, Any]) -> dict[str, Any]:
+        data = evidence_item.get("data", {}) if isinstance(evidence_item, dict) else {}
+        if not isinstance(data, dict):
+            data = {}
         ocr_text = self._evidence_store.get_ocr_text(evidence_item)
         if ocr_text is None:
-            return {key: data.get(key) for key in ("amount", "date", "reference", "ocr_available")}
+            fields: dict[str, Any] = {key: data.get(key) for key in ("amount", "date", "reference")}
+            if "ocr_available" in data:
+                fields["ocr_available"] = bool(data["ocr_available"])
+            else:
+                fields["ocr_available"] = False
+            return fields
         fields = self._extract_ocr_fields(ocr_text)
         fields["ocr_available"] = True
         return fields
 
-    def _compare_evidence(self, deduction: SettlementDeduction, evidence: dict) -> VerificationResult:
-        expected = {
+    def _compare_evidence(self, deduction: SettlementDeduction, evidence: dict[str, Any]) -> VerificationResult:
+        expected: dict[str, Any] = {
             "amount": deduction.amount,
             "date": deduction.reference_date,
             "reference": deduction.reference_id,
@@ -243,34 +257,39 @@ class EvidenceMatcher:
         required = len(checks)
         matched = sum(checks.values())
         confidence = matched / required if required else 0.0
-        evidence_match = {
-            "evidence_found": bool(evidence.get("ocr_available", True)),
+        ocr_avail = bool(evidence.get("ocr_available", True))
+        evidence_match: dict[str, Any] = {
+            "evidence_found": ocr_avail,
             "amount_match": checks.get("amount_match"),
             "date_match": checks.get("date_match"),
             "reference_match": checks.get("reference_match"),
             "confidence": confidence,
         }
-        if "amount" in evidence:
+        if "amount" in evidence and evidence["amount"] is not None:
             evidence_match["evidence_amount"] = evidence["amount"]
-        if not evidence.get("ocr_available", True) and not any(value is not None for value in evidence.values()):
+        if not ocr_avail and not any(value is not None for key, value in evidence.items() if key != "ocr_available"):
             reasons = ["Evidence OCR is unavailable"]
         has_mismatch = any(
             value is False and evidence.get(field.removesuffix("_match")) is not None
             for field, value in checks.items()
             if field.endswith("_match")
         )
-        status = "verified" if required and matched == required else "disputed" if has_mismatch else "unverifiable"
+        status: DeductionVerificationStatus = (
+            "verified" if required and matched == required
+            else "disputed" if has_mismatch
+            else "unverifiable"
+        )
         return VerificationResult(
-            deduction_id=deduction.id,
-            settlement_id=deduction.settlement_id,
+            deductionId=deduction.id,
+            settlementId=deduction.settlement_id,
             status=status,
             reason="All required evidence fields match" if status == "verified" else "; ".join(reasons),
-            deterministic_checks=checks,
-            evidence_match=evidence_match,
+            deterministicChecks=checks,
+            evidenceMatch=evidence_match,
         )
 
     @staticmethod
-    def _extract_ocr_fields(text: str) -> dict:
+    def _extract_ocr_fields(text: str) -> dict[str, Any]:
         amount_match = re.search(
             r"(?:amount|value|total|deduction|fee|refund|chargeback)\s*[:=-]?\s*(?:INR|Rs\.?|₹)?\s*([\d,]+(?:\.\d{1,2})?)",
             text,
@@ -293,7 +312,7 @@ class EvidenceMatcher:
         }
 
     @staticmethod
-    def _parse_date(value: date | str | None) -> date | None:
+    def _parse_date(value: object) -> date | None:
         if isinstance(value, date):
             return value
         if not isinstance(value, str):
@@ -312,13 +331,19 @@ class EvidenceMatcher:
     @staticmethod
     def _amounts_equal(first: object, second: object) -> bool:
         try:
-            return abs(float(first) - float(second)) <= 0.01
+            if isinstance(first, (int, float, str)) and isinstance(second, (int, float, str)):
+                return abs(float(first) - float(second)) <= 0.01
+            return False
         except (TypeError, ValueError):
             return False
 
     @staticmethod
     def _display(value: object) -> str:
-        return value.isoformat() if isinstance(value, date) else f"{float(value):.2f}" if isinstance(value, (int, float)) else str(value)
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, (int, float)):
+            return f"{value:.2f}"
+        return str(value)
     
     def match_settlement_evidence(
         self,
