@@ -54,6 +54,7 @@ class Settings(BaseSettings):
         "Accept",
         "Idempotency-Key",
         "X-Request-ID",
+        "X-Demo-User-ID",
     )
     cors_expose_headers: tuple[str, ...] = ("X-Request-ID",)
     cors_max_age_seconds: int = Field(default=600, ge=0, le=86400)
@@ -71,6 +72,11 @@ class Settings(BaseSettings):
 
     # NEW
     firebase_service_account_path: str | None = None
+
+    # Demo-only authentication bypass. When true, requests carrying an
+    # `X-Demo-User-ID` header are authenticated as that uid without a real
+    # Firebase ID token. Must never be enabled in production.
+    demo_auth_enabled: bool = False
 
     terms_version: str = "v1"
     local_storage_path: str = "storage/uploads"
@@ -102,6 +108,8 @@ class Settings(BaseSettings):
             )
         if self.formwise_env == "production" and not self.readiness_require_worker_heartbeat:
             raise ValueError("READINESS_REQUIRE_WORKER_HEARTBEAT must be enabled for production.")
+        if self.formwise_env == "production" and self.demo_auth_enabled:
+            raise ValueError("DEMO_AUTH_ENABLED must not be enabled in production.")
         return self
 
 
