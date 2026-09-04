@@ -74,3 +74,43 @@ class FirestoreSettlementDeductionRepository:
             .order_by("createdAt")
             .stream()
         ]
+
+
+class InMemorySettlementRepository:
+    def __init__(self) -> None:
+        self._settlements: dict[str, Settlement] = {}
+
+    def create(self, settlement: Settlement) -> str:
+        self._settlements[settlement.id] = settlement
+        return settlement.id
+
+    def get(self, settlement_id: str) -> Settlement | None:
+        return self._settlements.get(settlement_id)
+
+    def update(self, settlement_id: str, updates: dict[str, Any]) -> Settlement | None:
+        settlement = self._settlements.get(settlement_id)
+        if not settlement:
+            return None
+        data = settlement.model_dump()
+        data.update(updates)
+        updated = Settlement.model_validate(data)
+        self._settlements[settlement_id] = updated
+        return updated
+
+    def list_for_user(self, user_id: str) -> list[Settlement]:
+        return [s for s in self._settlements.values() if s.owner_uid == user_id]
+
+
+class InMemorySettlementDeductionRepository:
+    def __init__(self) -> None:
+        self._deductions: dict[str, SettlementDeduction] = {}
+
+    def create(self, deduction: SettlementDeduction) -> str:
+        self._deductions[deduction.id] = deduction
+        return deduction.id
+
+    def get(self, deduction_id: str) -> SettlementDeduction | None:
+        return self._deductions.get(deduction_id)
+
+    def list_for_settlement(self, settlement_id: str) -> list[SettlementDeduction]:
+        return [d for d in self._deductions.values() if d.settlement_id == settlement_id]
