@@ -18,3 +18,13 @@ def test_privacy_summaries_contain_categories_and_counts_only() -> None:
     assert [summary.model_dump() for summary in summaries(findings)] == [
         {"category": "email", "action": "REDACT", "count": 2}
     ]
+
+
+def test_realistic_contact_string_redaction() -> None:
+    source = "Contact example@gmail.com or call +91 9876543210"
+    findings = scan_text(source)
+    protected = redact_text(source, findings)
+
+    assert protected == "Contact [EMAIL REDACTED] or call [PHONE REDACTED]"
+    assert "example@gmail.com" not in protected
+    assert "9876543210" not in protected
