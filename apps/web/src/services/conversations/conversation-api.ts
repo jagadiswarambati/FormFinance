@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { buildAuthHeaders } from '@/lib/api-auth';
 
 export interface ConversationMessage {
   id: string;
@@ -54,7 +55,7 @@ export interface PrivacyAuditEvent {
 }
 
 function headers(token: string): HeadersInit {
-  return { Authorization: `Bearer ${token}` };
+  return buildAuthHeaders(token);
 }
 
 async function ensure(response: Response): Promise<void> {
