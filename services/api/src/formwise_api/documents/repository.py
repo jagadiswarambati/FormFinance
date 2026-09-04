@@ -80,3 +80,44 @@ class FirestoreDocumentRepository:
         if not isinstance(uploaded_at, datetime):
             uploaded_at = datetime.now(UTC)
         return DocumentResponse(document_id=str(data["documentId"]), owner_uid=str(data["ownerUid"]), original_filename=str(data["originalFilename"]), stored_filename=str(data["storedFilename"]), content_type=str(data["contentType"]), file_size=int(data["fileSize"]), uploaded_at=uploaded_at, status=str(data["status"]), quarantine_status=str(data.get("quarantineStatus", "not_quarantined")), scan_status=str(data.get("scanStatus", "not_requested")), scan_started_at=data.get("scanStartedAt") if isinstance(data.get("scanStartedAt"), datetime) else None, scan_completed_at=data.get("scanCompletedAt") if isinstance(data.get("scanCompletedAt"), datetime) else None, scan_provider=data.get("scanProvider") if isinstance(data.get("scanProvider"), str) else None, scan_reason=data.get("scanReason") if isinstance(data.get("scanReason"), str) else None, ocr_status=str(data.get("ocrStatus", "not_started")), ocr_started_at=data.get("ocrStartedAt") if isinstance(data.get("ocrStartedAt"), datetime) else None, ocr_completed_at=data.get("ocrCompletedAt") if isinstance(data.get("ocrCompletedAt"), datetime) else None, ocr_provider=data.get("ocrProvider") if isinstance(data.get("ocrProvider"), str) else None, ocr_confidence=float(data["ocrConfidence"]) if isinstance(data.get("ocrConfidence"), (float, int)) else None, text_length=int(data["textLength"]) if isinstance(data.get("textLength"), int) else None, ocr_text_storage_key=data.get("ocrTextStorageKey") if isinstance(data.get("ocrTextStorageKey"), str) else None, ocr_layout_storage_key=data.get("ocrLayoutStorageKey") if isinstance(data.get("ocrLayoutStorageKey"), str) else None, protected_layout_storage_key=data.get("protectedLayoutStorageKey") if isinstance(data.get("protectedLayoutStorageKey"), str) else None, privacy_status=str(data.get("privacyStatus", "not_started")), privacy_completed_at=data.get("privacyCompletedAt") if isinstance(data.get("privacyCompletedAt"), datetime) else None, privacy_policy_version=data.get("privacyPolicyVersion") if isinstance(data.get("privacyPolicyVersion"), str) else None, pii_categories=[str(item) for item in data.get("piiCategories", []) if isinstance(item, str)], redacted_text_storage_key=data.get("redactedTextStorageKey") if isinstance(data.get("redactedTextStorageKey"), str) else None, consent_decision=data.get("consentDecision") if isinstance(data.get("consentDecision"), str) else None)
+
+
+class InMemoryDocumentRepository:
+    def __init__(self) -> None:
+        self._documents: dict[str, DocumentResponse] = {}
+
+    def create_pending(self, document: DocumentResponse) -> None:
+        self._documents[document.document_id] = document
+
+    def get_for_owner(self, document_id: str, owner_uid: str) -> DocumentResponse | None:
+        doc = self._documents.get(document_id)
+        if doc and doc.owner_uid == owner_uid:
+            return doc
+        return None
+
+    def mark_quarantined(self, document_id: str) -> DocumentResponse:
+        doc = self._documents.get(document_id)
+        if not doc:
+            raise KeyError(document_id)
+        updated = doc.model_copy(update={"status": "quarantined", "quarantine_status": "pending"})
+        self._documents[document_id] = updated
+        return updated
+
+    def list_for_owner(self, owner_uid: str, limit: int) -> list[DocumentResponse]:
+        return [doc for doc in self._documents.values() if doc.owner_uid == owner_uid][:limit]
+
+    def start_ocr(self, document_id: str, owner_uid: str, provider: str) -> DocumentResponse | None:
+        doc = self._documents.get(document_id)
+        if not doc or doc.owner_uid != owner_uid:
+            return None
+        updated = doc.model_copy(update={"scan_status": "queued", "ocr_provider": provider})
+        self._documents[document_id] = updated
+        return updated
+
+    def update_privacy(self, document_id: str, owner_uid: str, updates: dict[str, Any]) -> DocumentResponse | None:
+        doc = self._documents.get(document_id)
+        if not doc or doc.owner_uid != owner_uid:
+            return None
+        updated = doc.model_copy(update=updates)
+        self._documents[document_id] = updated
+        return updated
