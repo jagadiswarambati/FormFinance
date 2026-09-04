@@ -7,7 +7,7 @@ from formwise_api.settlements.repository import (
     SettlementDeductionRepository,
 )
 from formwise_api.settlements.deterministic_verifier import DeterministicVerifier
-from formwise_api.settlements.evidence_matcher import EvidenceMatcher
+from formwise_api.settlements.evidence_matcher import EvidenceMatcher, SettlementEvidenceStore
 from formwise_api.settlements.finance_agent import SettlementFinanceAgent
 from formwise_api.verification.models import SettlementDecision
 from formwise_api.verification.repository import (
@@ -40,14 +40,21 @@ class SettlementVerificationService:
         audit_repo: FinanceAuditEventRepository,
         evidence_link_repo: Optional[EvidenceLinkRepository] = None,
         ai_provider: Optional[AIProvider] = None,
+        evidence_store: Optional[SettlementEvidenceStore] = None,
     ):
         self._settlement_repo = settlement_repo
         self._deduction_repo = deduction_repo
         self._verification_repo = verification_repo
         self._decision_repo = decision_repo
         self._audit_repo = audit_repo
+        self._evidence_link_repo = evidence_link_repo
         self._verifier = DeterministicVerifier()
-        self._evidence_matcher = EvidenceMatcher(evidence_link_repo) if evidence_link_repo else None
+        self._evidence_store = evidence_store
+        self._evidence_matcher = (
+            EvidenceMatcher(evidence_link_repo, evidence_store=evidence_store)
+            if evidence_link_repo
+            else None
+        )
         self._agent = SettlementFinanceAgent(ai_provider, audit_repo) if ai_provider else None
 
     def verify_settlement(self, settlement_id: str) -> SettlementDecision | None:
@@ -98,44 +105,38 @@ class SettlementVerificationService:
             # Step 1: Run deterministic verification
             result = self._verifier.verify_deduction(deduction, settlement)
             
-            # Step 2: If deterministic check passes, accept result
-            if result.status == "verified":
-                result.id = self._verification_repo.create(result)
-                verification_results.append(result)
-                verified_count += 1
-                continue
-            
-            # Step 3: For ambiguous/failed cases, try evidence matching
+            # Step 2: Try evidence matching if evidence matcher available
             if self._evidence_matcher:
                 evidence_result, evidence_link = self._evidence_matcher.match_deduction_to_evidence(
                     deduction, settlement
                 )
-                if evidence_result.status == "verified":
-                    evidence_result.id = self._verification_repo.create(evidence_result)
-                    verification_results.append(evidence_result)
-                    verified_count += 1
-                    continue
-                # If evidence matching also doesn't resolve, will try agent next
-                result = evidence_result
-            
-            # Step 4: If still ambiguous and agent available, run AI investigation
+                if evidence_link and self._evidence_link_repo:
+                    try:
+                        self._evidence_link_repo.create(evidence_link)
+                    except Exception:
+                        pass
+
+                # If evidence matcher returned verified or disputed, evidence result takes priority
+                if evidence_result.status in ("verified", "disputed"):
+                    result = evidence_result
+                elif result.status != "verified":
+                    result = evidence_result
+
+            # Step 3: If still ambiguous/disputed and agent available, run AI investigation
             if result.status in ("unverifiable", "disputed") and self._agent:
                 try:
-                    # Determine why deterministic check failed
                     verification_context = {
                         "error": result.reason,
                         "status": result.status,
                         "deterministic_checks": result.deterministic_checks or {},
                     }
                     
-                    # Run async agent investigation
                     import asyncio
                     agent_result = asyncio.run(
                         self._agent.investigate_deduction(deduction, settlement, verification_context)
                     )
                     result = agent_result
                 except Exception as e:
-                    # If agent fails, keep deterministic result
                     self._audit_repo.create(
                         FinanceAuditEvent(
                             settlement_id=settlement.id,
@@ -157,6 +158,7 @@ class SettlementVerificationService:
                 disputed_count += 1
             else:
                 unverifiable_count += 1
+
         
         # Make settlement-level decision based on verification results
         total = len(deductions)
