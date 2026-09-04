@@ -49,3 +49,45 @@ class FirestoreUserRepository:
         }
         reference.create(record)
         return CurrentUserResponse(uid=identity.uid, display_name=identity.display_name, email=identity.email, photo_url=identity.photo_url, locale="en", status="active", created_at=now, last_login=now)
+
+
+class InMemoryUserRepository:
+    def __init__(self) -> None:
+        self._users: dict[str, dict[str, Any]] = {}
+
+    def upsert_on_login(self, identity: AuthenticatedIdentity) -> CurrentUserResponse:
+        now = datetime.now(UTC)
+        if identity.uid in self._users:
+            user = self._users[identity.uid]
+            user["last_login"] = now
+            return CurrentUserResponse(
+                uid=identity.uid,
+                display_name=identity.display_name or user.get("display_name"),
+                email=identity.email,
+                photo_url=identity.photo_url or user.get("photo_url"),
+                locale=user.get("locale", "en"),
+                status=user.get("status", "active"),
+                created_at=user["created_at"],
+                last_login=now,
+            )
+        record = {
+            "uid": identity.uid,
+            "display_name": identity.display_name,
+            "email": identity.email,
+            "photo_url": identity.photo_url,
+            "created_at": now,
+            "last_login": now,
+            "locale": "en",
+            "status": "active",
+        }
+        self._users[identity.uid] = record
+        return CurrentUserResponse(
+            uid=identity.uid,
+            display_name=identity.display_name,
+            email=identity.email,
+            photo_url=identity.photo_url,
+            locale="en",
+            status="active",
+            created_at=now,
+            last_login=now,
+        )
