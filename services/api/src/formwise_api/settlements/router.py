@@ -102,91 +102,133 @@ class BatchMetricsResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-def get_settlement_service() -> SettlementService:
-    client = get_firestore_client()
-    return SettlementService(
-        FirestoreSettlementRepository(client),
-        FirestoreSettlementDeductionRepository(client),
-    )
+from formwise_api.config import get_settings
+from formwise_api.settlements.repository import (
+    FirestoreSettlementRepository,
+    FirestoreSettlementDeductionRepository,
+    InMemorySettlementRepository,
+    InMemorySettlementDeductionRepository,
+)
+from formwise_api.verification.repository import (
+    FirestoreVerificationResultRepository,
+    FirestoreSettlementDecisionRepository,
+    InMemoryVerificationResultRepository,
+    InMemorySettlementDecisionRepository,
+)
+from formwise_api.evidence.repository import (
+    FirestoreEvidenceLinkRepository,
+    InMemoryEvidenceLinkRepository,
+)
+from formwise_api.audit.repository import (
+    FirestoreFinanceAuditEventRepository,
+    InMemoryFinanceAuditEventRepository,
+)
+
+_demo_settlement_repo = InMemorySettlementRepository()
+_demo_deduction_repo = InMemorySettlementDeductionRepository()
+_demo_verification_repo = InMemoryVerificationResultRepository()
+_demo_decision_repo = InMemorySettlementDecisionRepository()
+_demo_evidence_repo = InMemoryEvidenceLinkRepository()
+_demo_audit_repo = InMemoryFinanceAuditEventRepository()
 
 
-def get_extraction_service() -> SettlementExtractionService:
-    client = get_firestore_client()
-    return SettlementExtractionService(
-        FirestoreSettlementRepository(client),
-        FirestoreSettlementDeductionRepository(client),
-        FirestoreFinanceAuditEventRepository(client),
-    )
+def _get_repositories(settings=None):
+    if settings is None:
+        settings = get_settings()
+    if settings.demo_auth_enabled:
+        return (
+            _demo_settlement_repo,
+            _demo_deduction_repo,
+            _demo_verification_repo,
+            _demo_decision_repo,
+            _demo_evidence_repo,
+            _demo_audit_repo,
+        )
+    try:
+        client = get_firestore_client()
+        return (
+            FirestoreSettlementRepository(client),
+            FirestoreSettlementDeductionRepository(client),
+            FirestoreVerificationResultRepository(client),
+            FirestoreSettlementDecisionRepository(client),
+            FirestoreEvidenceLinkRepository(client),
+            FirestoreFinanceAuditEventRepository(client),
+        )
+    except Exception:
+        return (
+            _demo_settlement_repo,
+            _demo_deduction_repo,
+            _demo_verification_repo,
+            _demo_decision_repo,
+            _demo_evidence_repo,
+            _demo_audit_repo,
+        )
 
 
-def get_verification_service() -> SettlementVerificationService:
-    from formwise_api.config import Settings
+def get_settlement_service(settings=Depends(get_settings)) -> SettlementService:
+    s_repo, d_repo, _, _, _, _ = _get_repositories(settings)
+    return SettlementService(s_repo, d_repo)
+
+
+def get_extraction_service(settings=Depends(get_settings)) -> SettlementExtractionService:
+    s_repo, d_repo, _, _, _, a_repo = _get_repositories(settings)
+    return SettlementExtractionService(s_repo, d_repo, a_repo)
+
+
+def get_verification_service(settings=Depends(get_settings)) -> SettlementVerificationService:
     from formwise_api.ai_provider.factory import get_ai_provider
     
-    client = get_firestore_client()
-    settings = Settings()
+    s_repo, d_repo, v_repo, dec_repo, e_repo, a_repo = _get_repositories(settings)
     
-    # AI provider is optional for backward compatibility
     try:
         ai_provider = get_ai_provider(settings)
     except Exception:
         ai_provider = None
     
     return SettlementVerificationService(
-        FirestoreSettlementRepository(client),
-        FirestoreSettlementDeductionRepository(client),
-        FirestoreVerificationResultRepository(client),
-        FirestoreSettlementDecisionRepository(client),
-        FirestoreFinanceAuditEventRepository(client),
-        FirestoreEvidenceLinkRepository(client),
+        s_repo,
+        d_repo,
+        v_repo,
+        dec_repo,
+        a_repo,
+        e_repo,
         ai_provider,
     )
 
 
-def get_batch_processor() -> BatchSettlementProcessor:
-    from formwise_api.config import Settings
+def get_batch_processor(settings=Depends(get_settings)) -> BatchSettlementProcessor:
     from formwise_api.ai_provider.factory import get_ai_provider
+    from formwise_api.settlements.evidence_matcher import SettlementEvidenceStore
     
-    client = get_firestore_client()
-    settings = Settings()
+    s_repo, d_repo, v_repo, dec_repo, e_repo, a_repo = _get_repositories(settings)
     
     try:
         ai_provider = get_ai_provider(settings)
     except Exception:
         ai_provider = None
     
-    settlement_service = SettlementService(
-        FirestoreSettlementRepository(client),
-        FirestoreSettlementDeductionRepository(client),
-    )
+    doc_repo = get_document_repository(settings)
+    evidence_store = SettlementEvidenceStore(document_repo=doc_repo)
     
+    settlement_service = SettlementService(s_repo, d_repo)
     verification_service = SettlementVerificationService(
-        FirestoreSettlementRepository(client),
-        FirestoreSettlementDeductionRepository(client),
-        FirestoreVerificationResultRepository(client),
-        FirestoreSettlementDecisionRepository(client),
-        FirestoreFinanceAuditEventRepository(client),
-        FirestoreEvidenceLinkRepository(client),
-        ai_provider,
+        s_repo, d_repo, v_repo, dec_repo, a_repo, e_repo, ai_provider,
+        evidence_store=evidence_store,
     )
-    
     doc_extractor = DocumentSettlementExtractor(
-        FirestoreSettlementRepository(client),
-        FirestoreFinanceAuditEventRepository(client),
+        get_document_repository(settings),
+        a_repo,
     )
-    extraction_service = SettlementExtractionService(
-        FirestoreSettlementRepository(client),
-        FirestoreSettlementDeductionRepository(client),
-        FirestoreFinanceAuditEventRepository(client),
-    )
+    extraction_service = SettlementExtractionService(s_repo, d_repo, a_repo)
     
     return BatchSettlementProcessor(
         settlement_service,
         doc_extractor,
         verification_service,
-        FirestoreSettlementRepository(client),
+        s_repo,
         extraction_service,
     )
+
 
 
 @router.post(
@@ -361,22 +403,13 @@ async def run_demo_batch(
     batch_processor: BatchSettlementProcessor = Depends(get_batch_processor),
 ) -> BatchMetricsResponse:
     """
-    Run demo batch with 10 synthetic settlements showing diverse outcomes.
-    
-    Demonstrates:
-    - Approved settlements (all deductions verified)
-    - Flagged settlements (some discrepancies)
-    - Escalated settlements (high-risk or unverifiable)
-    - Processing failures (edge cases)
+    Run demo batch with 50 synthetic benchmark settlements showing diverse outcomes.
     """
-    from formwise_api.settlements.demo_data import get_demo_settlements
+    from formwise_api.settlements.demo_data import get_benchmark_settlements
     
     try:
-        # Use demo settlements
-        specs = get_demo_settlements()
-        
+        specs = get_benchmark_settlements()
         metrics, results = batch_processor.process_settlements(identity.uid, specs)
-        
         return BatchMetricsResponse(**metrics.to_dict())
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Demo batch failed: {str(e)}")
@@ -422,6 +455,14 @@ def get_processing_pipeline(
     document_repo = Depends(get_document_repository),
 ) -> SettlementProcessingPipeline:
     """Dependency to create processing pipeline"""
+    from formwise_api.config import Settings
+    from formwise_api.ai_provider.factory import get_ai_provider
+
+    try:
+        ai_provider = get_ai_provider(Settings())
+    except Exception:
+        ai_provider = None
+
     return SettlementProcessingPipeline(
         document_repo=document_repo,
         settlement_repo=FirestoreSettlementRepository(client),
@@ -430,6 +471,7 @@ def get_processing_pipeline(
         decision_repo=FirestoreSettlementDecisionRepository(client),
         evidence_repo=FirestoreEvidenceLinkRepository(client),
         audit_repo=FirestoreFinanceAuditEventRepository(client),
+        ai_provider=ai_provider,
     )
 
 
