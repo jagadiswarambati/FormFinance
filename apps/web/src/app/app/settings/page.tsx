@@ -3,8 +3,11 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/components/theme-provider';
+import { useAuth } from '@/contexts/auth-context';
 export default function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
+  const { authMode } = useAuth();
+  const authModeLabel = { firebase: 'Firebase (live)', demo: 'Demo mode (backend-verified)', unconfigured: 'Not configured' }[authMode];
   return (
     <section className="mx-auto max-w-2xl">
       <h1 className="text-3xl font-semibold">Settings</h1>
@@ -12,7 +15,7 @@ export default function SettingsPage() {
       <div className="mt-8 space-y-4">
         <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
           <h2 className="font-semibold">Application</h2>
-          <dl className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300"><div className="flex justify-between gap-4"><dt>Product</dt><dd className="font-medium text-slate-950 dark:text-white">AI Finance Controller</dd></div><div className="flex justify-between gap-4"><dt>Mode</dt><dd className="font-medium text-slate-950 dark:text-white">Demo Mode</dd></div><div className="flex justify-between gap-4"><dt>Authentication</dt><dd className="font-medium text-slate-950 dark:text-white">Disabled</dd></div></dl>
+          <dl className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300"><div className="flex justify-between gap-4"><dt>Product</dt><dd className="font-medium text-slate-950 dark:text-white">AI Finance Controller</dd></div><div className="flex justify-between gap-4"><dt>Mode</dt><dd className="font-medium text-slate-950 dark:text-white">Demo Mode</dd></div><div className="flex justify-between gap-4"><dt>Authentication</dt><dd className="font-medium text-slate-950 dark:text-white">{authModeLabel}</dd></div></dl>
         </section>
         <section className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
           <div>
