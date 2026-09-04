@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { buildAuthHeaders } from '@/lib/api-auth';
 
 export interface FieldAssignment {
   id: string;
@@ -19,7 +20,7 @@ export interface FieldAssignment {
 }
 
 function headers(token: string): HeadersInit {
-  return { Authorization: `Bearer ${token}` };
+  return buildAuthHeaders(token);
 }
 async function ensure(response: Response): Promise<void> {
   if (response.ok) return;
