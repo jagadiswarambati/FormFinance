@@ -39,7 +39,7 @@ from formwise_api.settlements.repository import (
 
 class MockFirestoreClient:
     """Mock Firestore client for testing."""
-    
+
     def __init__(self):
         self.data = {
             "settlements": {},
@@ -47,31 +47,31 @@ class MockFirestoreClient:
             "verificationResults": {},
             "settlementDecisions": {},
         }
-    
+
     def collection(self, name):
         return MockCollection(self.data, name)
 
 
 class MockCollection:
     """Mock Firestore collection."""
-    
+
     def __init__(self, data, name):
         self.data = data
         self.name = name
         self._filters = []
         self._order_by = None
-    
+
     def document(self, doc_id):
         return MockDocument(self.data, self.name, doc_id)
-    
+
     def where(self, field, op, value):
         self._filters.append((field, op, value))
         return self
-    
+
     def order_by(self, field, direction=None):
         self._order_by = (field, direction)
         return self
-    
+
     def stream(self):
         docs = []
         for doc_id, doc_data in self.data[self.name].items():
@@ -84,32 +84,32 @@ class MockCollection:
                 if field == "settlementId" and op == "==":
                     if doc_data.get("settlementId") != value:
                         match = False
-            
+
             if match:
                 docs.append(MockSnapshot(doc_id, doc_data, True))
-        
+
         return docs
 
 
 class MockDocument:
     """Mock Firestore document."""
-    
+
     def __init__(self, data, collection, doc_id):
         self.data = data
         self.collection_name = collection
         self.doc_id = doc_id
-    
+
     def create(self, data):
         if self.collection_name not in self.data:
             self.data[self.collection_name] = {}
         self.data[self.collection_name][self.doc_id] = data
-    
+
     def get(self):
         docs = self.data.get(self.collection_name, {})
         if self.doc_id in docs:
             return MockSnapshot(self.doc_id, docs[self.doc_id], True)
         return MockSnapshot(self.doc_id, {}, False)
-    
+
     def update(self, data):
         if self.collection_name in self.data and self.doc_id in self.data[self.collection_name]:
             self.data[self.collection_name][self.doc_id].update(data)
@@ -117,12 +117,12 @@ class MockDocument:
 
 class MockSnapshot:
     """Mock Firestore snapshot."""
-    
+
     def __init__(self, doc_id, data, exists):
         self._doc_id = doc_id
         self._data = data
         self.exists = exists
-    
+
     def to_dict(self):
         return self._data if self.exists else None
 
@@ -145,20 +145,25 @@ def settlement_service(mock_firestore_client):
 def batch_processor(mock_firestore_client, settlement_service):
     """Create batch processor with mocked dependencies."""
     from formwise_api.settlements.extraction_service import SettlementExtractionService
+    from formwise_api.settlements.evidence_matcher import SettlementEvidenceStore
     from formwise_api.verification.repository import (
         FirestoreVerificationResultRepository,
         FirestoreSettlementDecisionRepository,
     )
     from formwise_api.evidence.repository import FirestoreEvidenceLinkRepository
     from formwise_api.audit.repository import FirestoreFinanceAuditEventRepository
-    
+
     settlement_repo = FirestoreSettlementRepository(mock_firestore_client)
     deduction_repo = FirestoreSettlementDeductionRepository(mock_firestore_client)
     verification_repo = FirestoreVerificationResultRepository(mock_firestore_client)
     decision_repo = FirestoreSettlementDecisionRepository(mock_firestore_client)
     audit_repo = FirestoreFinanceAuditEventRepository(mock_firestore_client)
     evidence_repo = FirestoreEvidenceLinkRepository(mock_firestore_client)
-    
+
+    # Shared evidence store so evidence registered by the batch processor
+    # is visible to the evidence matcher during verification.
+    evidence_store = SettlementEvidenceStore()
+
     doc_extractor = DocumentSettlementExtractor(
         settlement_repo,
         audit_repo,
@@ -168,7 +173,7 @@ def batch_processor(mock_firestore_client, settlement_service):
         deduction_repo,
         audit_repo,
     )
-    
+
     verification_service = SettlementVerificationService(
         settlement_repo,
         deduction_repo,
@@ -177,8 +182,9 @@ def batch_processor(mock_firestore_client, settlement_service):
         audit_repo,
         evidence_repo,
         ai_provider=None,  # No AI provider for demo
+        evidence_store=evidence_store,
     )
-    
+
     return BatchSettlementProcessor(
         settlement_service,
         doc_extractor,
@@ -190,13 +196,13 @@ def batch_processor(mock_firestore_client, settlement_service):
 
 class TestDemoEndToEndWorkflow:
     """Test complete end-to-end demo workflow."""
-    
+
     def test_demo_settlements_structure(self):
         """Verify demo settlements have required structure."""
         settlements = get_demo_settlements()
-        
+
         assert len(settlements) == 10, "Should have 10 demo settlements"
-        
+
         for i, settlement in enumerate(settlements, 1):
             assert "source" in settlement
             assert "settlement_date" in settlement
@@ -206,35 +212,35 @@ class TestDemoEndToEndWorkflow:
             assert "ocr_text" in settlement
             assert "_expected_outcome" in settlement
             assert "_description" in settlement
-            
+
             # Validate amounts
             assert settlement["gross_amount"] > 0
             assert settlement["net_amount"] > 0
             assert settlement["net_amount"] <= settlement["gross_amount"]
-    
+
     def test_demo_outcomes(self):
         """Verify demo settlements have expected outcomes."""
         settlements = get_demo_settlements()
         expected_outcomes = ["approved", "flagged", "escalated"]
         outcomes = [s["_expected_outcome"] for s in settlements]
-        
+
         # Should have some of each outcome for demo
         assert "approved" in outcomes
         assert "flagged" in outcomes
         assert "escalated" in outcomes
-        
+
         # Print demo structure for reference
         print("\n=== DEMO SETTLEMENT OUTCOMES ===")
         for i, s in enumerate(settlements, 1):
             print(f"{i}. {s['_description']}")
             print(f"   Expected: {s['_expected_outcome']}")
-    
+
     def test_batch_processing_metrics_structure(self, batch_processor):
         """Test that batch processing produces correct metrics."""
         settlements = get_demo_settlements()[:3]  # Use first 3 for quick test
-        
+
         metrics, results = batch_processor.process_settlements("test-user", settlements)
-        
+
         # Check metrics structure
         assert isinstance(metrics, BatchMetrics)
         assert metrics.total_settlements == 3
@@ -243,19 +249,19 @@ class TestDemoEndToEndWorkflow:
         assert metrics.flagged_count >= 0
         assert metrics.escalated_count >= 0
         assert metrics.approved_count + metrics.flagged_count + metrics.escalated_count + metrics.processing_failed_count == 3
-        
+
         # Check rates
         assert 0 <= metrics.settlement_approval_rate <= 1
         assert 0 <= metrics.deduction_verification_rate <= 1
-    
+
     def test_batch_processing_results_structure(self, batch_processor):
         """Test that batch processing produces correct result structures."""
         settlements = get_demo_settlements()[:2]
-        
+
         metrics, results = batch_processor.process_settlements("test-user", settlements)
-        
+
         assert len(results) == 2
-        
+
         for result in results:
             assert isinstance(result, SettlementProcessResult)
             assert result.settlement_id
@@ -266,18 +272,18 @@ class TestDemoEndToEndWorkflow:
             assert result.verified_count >= 0
             assert result.disputed_count >= 0
             assert result.unverifiable_count >= 0
-    
+
     def test_batch_processing_end_to_end(self, batch_processor):
         """Test complete end-to-end batch processing."""
         settlements = get_demo_settlements()
-        
+
         print("\n=== BATCH PROCESSING START ===")
         metrics, results = batch_processor.process_settlements("demo-user", settlements)
         print("=== BATCH PROCESSING COMPLETE ===")
-        
+
         # Verify all settlements were processed
         assert len(results) == 10
-        
+
         # Verify metrics calculation
         assert metrics.total_settlements == 10
         total_processed = (
@@ -287,10 +293,10 @@ class TestDemoEndToEndWorkflow:
             metrics.processing_failed_count
         )
         assert total_processed == 10
-        
+
         # Verify at least some variability in outcomes
         assert metrics.approved_count > 0 or metrics.flagged_count > 0 or metrics.escalated_count > 0
-        
+
         # Print detailed results
         print(f"\n=== BATCH METRICS ===")
         print(f"Total Settlements: {metrics.total_settlements}")
@@ -305,7 +311,7 @@ class TestDemoEndToEndWorkflow:
         print(f"  Disputed: {metrics.disputed_deductions}")
         print(f"  Unverifiable: {metrics.unverifiable_deductions}")
         print(f"  Verification Rate: {metrics.deduction_verification_rate:.1%}")
-        
+
         if metrics.exceptions:
             print(f"\nExceptions ({len(metrics.exceptions)}):")
             for exc in metrics.exceptions:
@@ -313,7 +319,7 @@ class TestDemoEndToEndWorkflow:
                 if exc.get('gaps'):
                     for gap in exc['gaps'][:2]:  # Show first 2 gaps
                         print(f"    → {gap}")
-    
+
     def test_settlement_approval_calculation(self):
         """Test settlement approval rate calculation."""
         # Create mock metrics
@@ -322,10 +328,10 @@ class TestDemoEndToEndWorkflow:
         metrics.approved_count = 3
         metrics.flagged_count = 5
         metrics.escalated_count = 2
-        
+
         expected_rate = 3 / 10
         assert metrics.settlement_approval_rate == 0.0 or expected_rate > 0
-    
+
     def test_metrics_to_dict_conversion(self):
         """Test metrics conversion to dictionary."""
         metrics = BatchMetrics()
@@ -333,14 +339,14 @@ class TestDemoEndToEndWorkflow:
         metrics.approved_count = 5
         metrics.flagged_count = 3
         metrics.escalated_count = 2
-        
+
         metrics_dict = metrics.to_dict()
-        
+
         assert isinstance(metrics_dict, dict)
         assert metrics_dict["total_settlements"] == 10
         assert metrics_dict["approved_count"] == 5
         assert "timestamp" in metrics_dict
-    
+
     def test_process_result_to_dict_conversion(self):
         """Test result conversion to dictionary."""
         result = SettlementProcessResult(
@@ -351,9 +357,9 @@ class TestDemoEndToEndWorkflow:
             deduction_count=2,
             verified_count=2,
         )
-        
+
         result_dict = result.to_dict()
-        
+
         assert isinstance(result_dict, dict)
         assert result_dict["settlement_id"] == "test-id"
         assert result_dict["status"] == "approved"
@@ -361,7 +367,15 @@ class TestDemoEndToEndWorkflow:
 
 
     def test_fifty_record_benchmark(self, batch_processor, mock_firestore_client):
-        """Process the deterministic 50-record benchmark through the batch pipeline."""
+        """Process the deterministic 50-record benchmark through the batch pipeline.
+
+        Expected outcomes by scenario:
+        - valid (20): evidence matches → verified → approved
+        - mismatch (12): evidence amount off by 250 → disputed → flagged
+        - missing_evidence (8): no evidence, low confidence → unverifiable → escalated
+        - exception (5): extra unresolvable deductions, low confidence → unverifiable → escalated
+        - extraction_failure (5): no OCR/deductions → processing failed
+        """
         specs = get_benchmark_settlements()
 
         metrics, results = batch_processor.process_settlements("benchmark-user", specs)
@@ -372,14 +386,15 @@ class TestDemoEndToEndWorkflow:
         assert metrics.processed == 45
         assert metrics.successfully_extracted == 45
         assert metrics.processing_failed_count == 5
-        assert metrics.approved_count == 20
-        assert metrics.flagged_count == 12
-        assert metrics.escalated_count == 13
-        assert metrics.exception_count == 25
+        assert metrics.approved_count == 20          # 20 valid
+        assert metrics.flagged_count == 12            # 12 mismatch → disputed → flagged
+        assert metrics.escalated_count == 13          # 8 missing_evidence + 5 exception
+        assert metrics.exception_count == 25          # flagged + escalated
         assert metrics.exception_rate == 0.5
         assert metrics.extraction_success_rate == 0.9
-        assert metrics.evidence_checked == 13
-        assert metrics.evidence_match_rate == 0.0
+        assert metrics.evidence_matched == 20         # only valid records match
+        assert metrics.evidence_checked == 45         # all non-failure records
+        assert round(metrics.evidence_match_rate, 4) == round(20 / 45, 4)
 
         stored = mock_firestore_client.data["settlementDeductions"]
         assert len(stored) == metrics.total_deductions
@@ -391,12 +406,12 @@ class TestDemoEndToEndWorkflow:
 
 class TestDemoDataQuality:
     """Test quality and consistency of demo data."""
-    
+
     def test_demo_data_diversity(self):
         """Verify demo data covers diverse scenarios."""
         settlements = get_demo_settlements()
         descriptions = [s["_description"] for s in settlements]
-        
+
         # Verify we have different types of issues
         assert any("fee" in d.lower() for d in descriptions), "Should have fee-related case"
         assert any("refund" in d.lower() for d in descriptions), "Should have refund case"
@@ -404,11 +419,11 @@ class TestDemoDataQuality:
         assert any("gateway" in d.lower() for d in descriptions), "Should have multi-gateway"
         assert any("duplicate" in d.lower() for d in descriptions), "Should have duplicate"
         assert any("date" in d.lower() for d in descriptions), "Should have date discrepancy"
-    
+
     def test_demo_data_completeness(self):
         """Verify all demo settlements are complete."""
         settlements = get_demo_settlements()
-        
+
         for settlement in settlements:
             # All required fields
             assert settlement["source"]
@@ -417,7 +432,7 @@ class TestDemoDataQuality:
             assert settlement["net_amount"] > 0
             assert settlement["currency"]
             assert settlement["ocr_text"]  # Should have some OCR text
-            
+
             # Deductions should be less than or equal to gross
             deduction = settlement["gross_amount"] - settlement["net_amount"]
             assert deduction >= 0, f"Deduction should be positive: {deduction}"
@@ -425,7 +440,7 @@ class TestDemoDataQuality:
 
 class TestDemoBuildathonMetrics:
     """Test buildathon-relevant metrics."""
-    
+
     def test_metrics_structure_for_buildathon(self):
         """Verify metrics cover buildathon requirements."""
         metrics = BatchMetrics()
@@ -437,9 +452,9 @@ class TestDemoBuildathonMetrics:
         metrics.verified_deductions = 10
         metrics.disputed_deductions = 3
         metrics.unverifiable_deductions = 2
-        
+
         metrics_dict = metrics.to_dict()
-        
+
         # Check buildathon metrics
         assert "total_settlements" in metrics_dict
         assert "total_deductions" in metrics_dict
@@ -452,11 +467,11 @@ class TestDemoBuildathonMetrics:
         assert "settlement_approval_rate" in metrics_dict
         assert "deduction_verification_rate" in metrics_dict
         assert "exceptions" in metrics_dict
-        
+
         # Calculate rates
         approval_rate = metrics.approved_count / metrics.total_settlements if metrics.total_settlements else 0
         verification_rate = metrics.verified_deductions / metrics.total_deductions if metrics.total_deductions else 0
-        
+
         print(f"\n=== BUILDATHON METRICS ===")
         print(f"Settlements Processed: {metrics.total_settlements}")
         print(f"Deductions Processed: {metrics.total_deductions}")
