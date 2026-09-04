@@ -31,3 +31,18 @@ class FirestoreFinanceAuditEventRepository:
             .order_by("timestamp")
             .stream()
         ]
+
+
+class InMemoryFinanceAuditEventRepository:
+    def __init__(self) -> None:
+        self._events: dict[str, FinanceAuditEvent] = {}
+
+    def create(self, event: FinanceAuditEvent) -> str:
+        self._events[event.id] = event
+        return event.id
+
+    def get(self, event_id: str) -> FinanceAuditEvent | None:
+        return self._events.get(event_id)
+
+    def list_for_settlement(self, settlement_id: str) -> list[FinanceAuditEvent]:
+        return [e for e in self._events.values() if e.settlement_id == settlement_id]
