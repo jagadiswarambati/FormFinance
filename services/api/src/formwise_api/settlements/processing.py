@@ -33,6 +33,7 @@ from formwise_api.audit.repository import FinanceAuditEventRepository
 from formwise_api.audit.finance_audit_events import FinanceAuditEvent
 from formwise_api.documents.repository import DocumentRepository
 from formwise_api.evidence.repository import EvidenceLinkRepository
+from formwise_api.ai_provider.interfaces import AIProvider
 from formwise_worker.ocr.store import LocalOcrResultStore
 
 
@@ -49,6 +50,7 @@ class SettlementProcessingPipeline:
         evidence_repo: EvidenceLinkRepository,
         audit_repo: FinanceAuditEventRepository,
         evidence_store: Optional[SettlementEvidenceStore] = None,
+        ai_provider: Optional[AIProvider] = None,
     ):
         self._document_repo = document_repo
         self._settlement_repo = settlement_repo
@@ -57,6 +59,7 @@ class SettlementProcessingPipeline:
         self._decision_repo = decision_repo
         self._evidence_repo = evidence_repo
         self._audit_repo = audit_repo
+        self._ai_provider = ai_provider
         
         # Initialize evidence store with document repo
         self._evidence_store = evidence_store or SettlementEvidenceStore(
@@ -80,9 +83,11 @@ class SettlementProcessingPipeline:
             decision_repo=decision_repo,
             audit_repo=audit_repo,
             evidence_link_repo=evidence_repo,
+            ai_provider=ai_provider,
+            evidence_store=self._evidence_store,
         )
         # Agent is initialized within SettlementVerificationService if ai_provider is available
-        self._agent = None  # Not directly needed here
+        self._agent = self._verification_service._agent
     
     def process_settlement_document(
         self,
@@ -370,8 +375,8 @@ class SettlementProcessingPipeline:
         if not settlement or settlement.owner_uid != owner_uid:
             return None
         
-        deductions = self._deduction_repo.list_by_settlement(settlement_id)
-        decision = self._decision_repo.get_by_settlement(settlement_id)
+        deductions = getattr(self._deduction_repo, "list_for_settlement", getattr(self._deduction_repo, "list_by_settlement", lambda sid: []))(settlement_id)
+        decision = getattr(self._decision_repo, "get_by_settlement", getattr(self._decision_repo, "get_for_settlement", lambda sid: None))(settlement_id)
         
         if not decision:
             return None
