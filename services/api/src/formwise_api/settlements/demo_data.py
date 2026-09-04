@@ -275,18 +275,39 @@ def get_benchmark_settlements() -> list[dict]:
             index += 1
             gross = 100000.0 + index * 1000
             amount = 1000.0 + index
+            ref_date = f"2026-08-{(index % 28) + 1:02d}"
+            ref_id = f"BENCH-{index:03d}"
             deductions = [{
                 "type": "fee",
                 "description": f"Benchmark fee {index}",
                 "amount": amount,
-                "reference_id": f"BENCH-{index:03d}",
-                "reference_date": f"2026-08-{(index % 28) + 1:02d}",
+                "reference_id": ref_id,
+                "reference_date": ref_date,
                 "confidence": 0.95 if scenario not in ("exception", "missing_evidence") else 0.25,
             }]
             net = gross - amount
-            if scenario == "mismatch":
-                deductions[0]["amount"] = gross + 100.0
-                net = 1.0
+            evidence = []
+            if scenario == "valid":
+                evidence = [{
+                    "type": "document",
+                    "data": {
+                        "amount": amount,
+                        "date": ref_date,
+                        "reference": ref_id,
+                        "ocr_available": True,
+                    }
+                }]
+            elif scenario == "mismatch":
+                net = gross - amount - 250.0
+                evidence = [{
+                    "type": "document",
+                    "data": {
+                        "amount": amount + 250.0,
+                        "date": ref_date,
+                        "reference": ref_id,
+                        "ocr_available": True,
+                    }
+                }]
             elif scenario == "exception":
                 deductions.append({
                     "type": "refund",
@@ -297,20 +318,23 @@ def get_benchmark_settlements() -> list[dict]:
                 net -= 500.0
             elif scenario == "extraction_failure":
                 deductions = None
+
             records.append({
                 "settlement_id": f"benchmark-{index:03d}",
                 "source": ("razorpay", "stripe", "paypal")[index % 3],
-                "settlement_date": f"2026-08-{(index % 28) + 1:02d}",
+                "settlement_date": ref_date,
                 "gross_amount": gross,
                 "net_amount": net,
                 "currency": "INR",
                 "deductions": deductions,
+                "evidence": evidence,
                 "ocr_text": "" if scenario == "extraction_failure" else "Benchmark settlement record with deterministic input.",
-                "evidence_checked": scenario in ("missing_evidence", "exception"),
-                "evidence_matched": False,
+                "evidence_checked": scenario != "extraction_failure",
+                "evidence_matched": scenario == "valid",
                 "_scenario": scenario,
             })
     return records
+
 
 
 if __name__ == "__main__":
