@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from formwise_api.authentication.models import AuthenticatedIdentity, CurrentUserResponse
 from formwise_api.config import Settings, get_settings
-from formwise_api.dependencies.authentication import get_authenticated_identity
+from formwise_api.dependencies.authentication import get_authenticated_identity, get_user_repository
 from formwise_api.main import app
 
 
@@ -77,6 +77,7 @@ def test_production_settings_reject_demo_auth_enabled() -> None:
 def test_me_endpoint_accepts_demo_header_end_to_end() -> None:
     """Full HTTP round trip through /me using only the X-Demo-User-ID header."""
     app.dependency_overrides[get_settings] = lambda: Settings(demo_auth_enabled=True)
+    app.dependency_overrides[get_user_repository] = lambda: FakeUserRepository()
     try:
         response = TestClient(app).get(
             "/api/v1/me",
@@ -84,7 +85,5 @@ def test_me_endpoint_accepts_demo_header_end_to_end() -> None:
         )
     finally:
         app.dependency_overrides.clear()
-    # Firestore is not available in this test environment, so we only assert
-    # that authentication itself succeeded (not a 401) — it should reach the
-    # user repository and fail there instead, proving the identity resolved.
-    assert response.status_code != 401
+    assert response.status_code == 200
+    assert response.json()["uid"] == "demo-user-42"
