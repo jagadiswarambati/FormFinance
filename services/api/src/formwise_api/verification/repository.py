@@ -70,3 +70,46 @@ class FirestoreSettlementDecisionRepository:
         for doc in docs:
             return SettlementDecision.model_validate(doc.to_dict() or {})
         return None
+
+
+class InMemoryVerificationResultRepository:
+    def __init__(self) -> None:
+        self._results: dict[str, VerificationResult] = {}
+
+    def create(self, result: VerificationResult) -> str:
+        self._results[result.id] = result
+        return result.id
+
+    def get(self, result_id: str) -> VerificationResult | None:
+        return self._results.get(result_id)
+
+    def update(self, result_id: str, updates: dict[str, Any]) -> VerificationResult | None:
+        res = self._results.get(result_id)
+        if not res:
+            return None
+        data = res.model_dump()
+        data.update(updates)
+        updated = VerificationResult.model_validate(data)
+        self._results[result_id] = updated
+        return updated
+
+    def list_for_settlement(self, settlement_id: str) -> list[VerificationResult]:
+        return [r for r in self._results.values() if r.settlement_id == settlement_id]
+
+
+class InMemorySettlementDecisionRepository:
+    def __init__(self) -> None:
+        self._decisions: dict[str, SettlementDecision] = {}
+
+    def create(self, decision: SettlementDecision) -> str:
+        self._decisions[decision.id] = decision
+        return decision.id
+
+    def get(self, decision_id: str) -> SettlementDecision | None:
+        return self._decisions.get(decision_id)
+
+    def get_by_settlement(self, settlement_id: str) -> SettlementDecision | None:
+        for d in self._decisions.values():
+            if d.settlement_id == settlement_id:
+                return d
+        return None
