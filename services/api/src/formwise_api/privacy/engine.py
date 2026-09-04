@@ -15,6 +15,9 @@ class PrivacyFinding:
 
 
 _PATTERNS: tuple[tuple[str, re.Pattern[str], PrivacyAction], ...] = (
+    ("email", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE), "REDACT"),
+    ("upi", re.compile(r"\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}(?!\.[a-zA-Z]{2,})\b"), "REDACT"),
+    ("phone", re.compile(r"(?<!\d)(?:\+91[ -]?)?[6-9]\d{9}(?!\d)"), "REDACT"),
     ("aadhaar", re.compile(r"(?<!\d)\d{4}[ -]?\d{4}[ -]?\d{4}(?!\d)"), "REDACT"),
     ("pan", re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b", re.IGNORECASE), "ASK_USER"),
     ("passport", re.compile(r"\b[A-PR-WY][1-9]\d{6}\b", re.IGNORECASE), "REDACT"),
@@ -22,10 +25,7 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str], PrivacyAction], ...] = (
     ("voter_id", re.compile(r"\b[A-Z]{3}\d{7}\b", re.IGNORECASE), "REDACT"),
     ("bank_account", re.compile(r"(?<!\d)\d{9,18}(?!\d)"), "REDACT"),
     ("ifsc", re.compile(r"\b[A-Z]{4}0[A-Z0-9]{6}\b", re.IGNORECASE), "REDACT"),
-    ("upi", re.compile(r"\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b"), "REDACT"),
     ("payment_card", re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)"), "BLOCK"),
-    ("phone", re.compile(r"(?<!\d)(?:\+91[ -]?)?[6-9]\d{9}(?!\d)"), "ASK_USER"),
-    ("email", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE), "REDACT"),
     ("date_of_birth", re.compile(r"\b(?:0?[1-9]|[12]\d|3[01])[/-](?:0?[1-9]|1[0-2])[/-](?:19|20)\d{2}\b"), "BLOCK"),
     ("insurance_number", re.compile(r"\b(?:insurance|policy)\s*(?:no\.?|number)?\s*[:#-]?\s*[A-Z0-9-]{6,}\b", re.IGNORECASE), "BLOCK"),
     ("patient_id", re.compile(r"\b(?:patient|mrn)\s*(?:id|no\.?|number)?\s*[:#-]?\s*[A-Z0-9-]{4,}\b", re.IGNORECASE), "BLOCK"),
