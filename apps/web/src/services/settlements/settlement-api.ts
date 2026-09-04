@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { buildAuthHeaders } from '@/lib/api-auth';
 
 export interface SettlementDeduction {
   id: string;
@@ -58,7 +59,7 @@ export async function processSettlementDocument(
   const response = await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/settlements/process-document`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${idToken}`,
+      ...buildAuthHeaders(idToken),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ documentId, evidenceDocumentIds }),
