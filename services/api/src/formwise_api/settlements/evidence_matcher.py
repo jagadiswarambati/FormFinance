@@ -80,24 +80,32 @@ class SettlementEvidenceStore:
         evidence_results = []
         
         # Get all documents for this owner
-        documents = self._document_repo.list_for_owner(owner_uid, limit=50)
-        
+        try:
+            documents = self._document_repo.list_for_owner(owner_uid, limit=50)
+        except Exception:
+            return []
+
         if not documents:
             return []
         
         # Match documents to deduction based on type and content hints
-        for doc in documents:
-            match_type = self._get_match_type(deduction, doc)
-            if match_type:
-                evidence_results.append({
-                    "type": "document",
-                    "data": {
-                        "document_id": doc.document_id,
-                        "filename": doc.original_filename,
-                        "match_type": match_type,
-                        "owner_uid": owner_uid,
-                    }
-                })
+        try:
+            for doc in documents:
+                match_type = self._get_match_type(deduction, doc)
+                if match_type:
+                    doc_id = getattr(doc, "document_id", None) or getattr(doc, "id", "doc_unknown")
+                    filename = getattr(doc, "original_filename", "")
+                    evidence_results.append({
+                        "type": "document",
+                        "data": {
+                            "document_id": doc_id,
+                            "filename": filename,
+                            "match_type": match_type,
+                            "owner_uid": owner_uid,
+                        }
+                    })
+        except TypeError:
+            return []
         
         return evidence_results
 
