@@ -25,7 +25,7 @@ class SettlementDeduction(BaseModel):
     amount: float  # In settlement currency
     reference_id: str | None = Field(default=None, alias="referenceId")
     reference_date: date | None = Field(default=None, alias="referenceDate")
-    extracted_with_confidence: float = Field(ge=0, le=1, alias="extractedWithConfidence")
+    extracted_with_confidence: float = Field(default=0.9, ge=0, le=1, alias="extractedWithConfidence")
     created_at: datetime = Field(default_factory=datetime.utcnow, alias="createdAt")
     
     model_config = ConfigDict(populate_by_name=True)
