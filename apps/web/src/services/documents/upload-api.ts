@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { buildAuthHeaders } from '@/lib/api-auth';
 
 export interface DocumentRecord {
   documentId: string;
@@ -85,7 +86,7 @@ interface UploadIntent {
 }
 
 function headers(idToken: string): HeadersInit {
-  return { Authorization: `Bearer ${idToken}` };
+  return buildAuthHeaders(idToken);
 }
 
 async function ensureResponse(response: Response): Promise<void> {
@@ -149,7 +150,8 @@ export async function getOcrStatus(
   idToken: string,
 ): Promise<Pick<DocumentRecord, 'ocrStatus' | 'ocrProvider' | 'ocrConfidence' | 'textLength'>> {
   const response = await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/documents/${documentId}/ocr`, {
-    headers: { ...headers(idToken), cache: 'no-store' },
+    headers: headers(idToken),
+    cache: 'no-store',
   });
   await ensureResponse(response);
   return response.json() as Promise<Pick<DocumentRecord, 'ocrStatus' | 'ocrProvider' | 'ocrConfidence' | 'textLength'>>;
