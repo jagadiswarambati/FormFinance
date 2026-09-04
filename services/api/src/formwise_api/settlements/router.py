@@ -76,6 +76,9 @@ class BatchProcessRequest(BaseModel):
 class BatchMetricsResponse(BaseModel):
     """Metrics from batch processing"""
     timestamp: str
+    total_records: int = 0
+    processed: int = 0
+    successfully_extracted: int = 0
     total_settlements: int
     total_deductions: int
     approved_count: int
@@ -87,6 +90,9 @@ class BatchMetricsResponse(BaseModel):
     unverifiable_deductions: int
     settlement_approval_rate: float
     deduction_verification_rate: float
+    evidence_match_rate: float = 0.0
+    exception_rate: float = 0.0
+    extraction_success_rate: float = 0.0
     agent_investigations: int
     agent_successes: int
     agent_failures: int
