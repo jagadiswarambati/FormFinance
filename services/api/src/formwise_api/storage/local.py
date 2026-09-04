@@ -1,3 +1,4 @@
+import mimetypes
 from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,7 @@ class LocalStorageAdapter:
     def __init__(self, directory: str, quarantine_directory: str) -> None:
         self._directory = Path(directory)
         self._quarantine_directory = Path(quarantine_directory)
+        self._content_types: dict[str, str] = {}
 
     async def write_upload(self, stored_filename: str, content_type: str, content: AsyncIterable[bytes], maximum_size: int) -> StoredObject:
         self._quarantine_directory.mkdir(parents=True, exist_ok=True)
@@ -34,13 +36,21 @@ class LocalStorageAdapter:
         except Exception:
             target.unlink(missing_ok=True)
             raise
+        self._content_types[stored_filename] = content_type
         return LocalStoredObject(content_type=content_type, file_size=total)
 
     def inspect(self, stored_filename: str) -> StoredObject | None:
         target = self._quarantine_directory / stored_filename
         if not target.is_file():
-            return None
-        return LocalStoredObject(content_type="", file_size=target.stat().st_size)
+            target = self._directory / stored_filename
+            if not target.is_file():
+                return None
+        content_type = self._content_types.get(stored_filename)
+        if not content_type:
+            guessed, _ = mimetypes.guess_type(stored_filename)
+            content_type = guessed or ("application/pdf" if stored_filename.endswith(".pdf") else "application/octet-stream")
+        return LocalStoredObject(content_type=content_type, file_size=target.stat().st_size)
+
 
     def release_quarantined(self, stored_filename: str) -> bool:
         source = self._quarantine_directory / stored_filename
