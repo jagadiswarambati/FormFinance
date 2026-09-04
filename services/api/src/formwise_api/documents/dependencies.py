@@ -3,16 +3,23 @@ from fastapi import Depends, HTTPException, status
 
 from formwise_api.authentication.firebase import get_firestore_client
 from formwise_api.config import Settings, get_settings
-from formwise_api.documents.repository import DocumentRepository, FirestoreDocumentRepository
+from formwise_api.documents.repository import DocumentRepository, FirestoreDocumentRepository, InMemoryDocumentRepository
 from formwise_api.documents.signing import UploadSigner
 from formwise_api.storage.interfaces import StorageAdapter
 from formwise_api.storage.local import LocalStorageAdapter
 
 logger = structlog.get_logger()
+_in_memory_doc_repository = InMemoryDocumentRepository()
 
 
-def get_document_repository() -> DocumentRepository:
-    return FirestoreDocumentRepository(get_firestore_client())
+def get_document_repository(settings: Settings = Depends(get_settings)) -> DocumentRepository:
+    if settings.demo_auth_enabled:
+        return _in_memory_doc_repository
+    try:
+        return FirestoreDocumentRepository(get_firestore_client())
+    except Exception:
+        return _in_memory_doc_repository
+
 
 
 def get_storage_adapter(settings: Settings = Depends(get_settings)) -> StorageAdapter:
