@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { buildAuthHeaders } from '@/lib/api-auth';
 export interface AuthenticatedUser {
   uid: string;
   displayName: string | null;
@@ -14,7 +15,7 @@ export async function fetchCurrentUser(idToken: string): Promise<AuthenticatedUs
     throw new Error('Backend authentication is not configured. Set NEXT_PUBLIC_API_BASE_URL.');
   }
   const response = await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/me`, {
-    headers: { Authorization: `Bearer ${idToken}` },
+    headers: buildAuthHeaders(idToken),
     cache: 'no-store',
   });
   if (response.status === 401)
