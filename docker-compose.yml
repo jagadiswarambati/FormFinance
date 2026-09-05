@@ -21,7 +21,7 @@ services:
     env_file: .env
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      DEMO_AUTH_ENABLED: ${DEMO_AUTH_ENABLED:-false}
+      DEMO_AUTH_ENABLED: ${DEMO_AUTH_ENABLED:-true}
     volumes:
       - upload-artifacts:/app/storage/uploads
       - quarantine-artifacts:/app/storage/quarantine
