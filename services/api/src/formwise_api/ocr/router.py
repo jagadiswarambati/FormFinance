@@ -7,13 +7,47 @@ from formwise_api.dependencies.authentication import get_authenticated_identity
 from formwise_api.documents.dependencies import get_document_repository
 from formwise_api.documents.models import DocumentResponse, OcrStatusResponse
 from formwise_api.documents.repository import DocumentRepository
-from formwise_api.ocr.jobs import FirestoreOcrJobRepository, OcrJobRepository
+from formwise_api.ocr.jobs import FirestoreOcrJobRepository, InMemoryOcrJobRepository, OcrJobRepository
 
 router = APIRouter(tags=["ocr"])
 
+# Reused across requests in demo mode so repeated OCR runs share the same
+# job history, mirroring how other demo-mode repositories are module-level
+# singletons in this codebase (see settlements/router.py, documents/dependencies.py).
+_demo_ocr_job_repo: InMemoryOcrJobRepository | None = None
 
-def get_ocr_job_repository() -> OcrJobRepository:
-    return FirestoreOcrJobRepository(get_firestore_client())
+
+def _get_demo_ocr_job_repository(
+    document_repo: DocumentRepository, settings: Settings
+) -> InMemoryOcrJobRepository:
+    global _demo_ocr_job_repo
+    if _demo_ocr_job_repo is None:
+        _demo_ocr_job_repo = InMemoryOcrJobRepository(
+            document_repo=document_repo,
+            local_storage_path=settings.local_storage_path,
+            ocr_result_storage_path=settings.ocr_result_storage_path,
+        )
+    return _demo_ocr_job_repo
+
+
+def get_ocr_job_repository(
+    settings: Settings = Depends(get_settings),
+    document_repo: DocumentRepository = Depends(get_document_repository),
+) -> OcrJobRepository:
+    """Demo-aware OCR job repository resolution.
+
+    Mirrors the `_get_repositories(settings)` pattern used by
+    `settlements/router.py` and `documents/dependencies.py`: when demo mode
+    is enabled, or when Firestore credentials aren't configured, fall back
+    to the in-memory repository (which still runs the real OCR provider)
+    instead of requiring live Firestore.
+    """
+    if settings.demo_auth_enabled:
+        return _get_demo_ocr_job_repository(document_repo, settings)
+    try:
+        return FirestoreOcrJobRepository(get_firestore_client())
+    except Exception:
+        return _get_demo_ocr_job_repository(document_repo, settings)
 
 
 @router.post("/{document_id}/ocr", response_model=DocumentResponse, response_model_by_alias=True, status_code=status.HTTP_202_ACCEPTED)
