@@ -106,43 +106,42 @@ from formwise_api.config import get_settings
 from formwise_api.settlements.repository import (
     FirestoreSettlementRepository,
     FirestoreSettlementDeductionRepository,
-    InMemorySettlementRepository,
-    InMemorySettlementDeductionRepository,
 )
 from formwise_api.verification.repository import (
     FirestoreVerificationResultRepository,
     FirestoreSettlementDecisionRepository,
-    InMemoryVerificationResultRepository,
-    InMemorySettlementDecisionRepository,
 )
-from formwise_api.evidence.repository import (
-    FirestoreEvidenceLinkRepository,
-    InMemoryEvidenceLinkRepository,
+from formwise_api.evidence.repository import FirestoreEvidenceLinkRepository
+from formwise_api.audit.repository import FirestoreFinanceAuditEventRepository
+from formwise_api.demo_state import (
+    get_demo_settlement_repository,
+    get_demo_settlement_deduction_repository,
+    get_demo_verification_result_repository,
+    get_demo_settlement_decision_repository,
+    get_demo_evidence_link_repository,
+    get_demo_finance_audit_event_repository,
 )
-from formwise_api.audit.repository import (
-    FirestoreFinanceAuditEventRepository,
-    InMemoryFinanceAuditEventRepository,
-)
-
-_demo_settlement_repo = InMemorySettlementRepository()
-_demo_deduction_repo = InMemorySettlementDeductionRepository()
-_demo_verification_repo = InMemoryVerificationResultRepository()
-_demo_decision_repo = InMemorySettlementDecisionRepository()
-_demo_evidence_repo = InMemoryEvidenceLinkRepository()
-_demo_audit_repo = InMemoryFinanceAuditEventRepository()
 
 
 def _get_repositories(settings=None):
+    """Resolve the six settlement-domain repositories.
+
+    Demo-mode repositories are obtained from `formwise_api.demo_state`,
+    whose `lru_cache`-wrapped factories guarantee a single shared instance
+    for the lifetime of the process, so records created in one request
+    (upload, extraction, verification, evidence, audit) remain visible in
+    every subsequent request. The real Firestore path is unchanged.
+    """
     if settings is None:
         settings = get_settings()
     if settings.demo_auth_enabled:
         return (
-            _demo_settlement_repo,
-            _demo_deduction_repo,
-            _demo_verification_repo,
-            _demo_decision_repo,
-            _demo_evidence_repo,
-            _demo_audit_repo,
+            get_demo_settlement_repository(),
+            get_demo_settlement_deduction_repository(),
+            get_demo_verification_result_repository(),
+            get_demo_settlement_decision_repository(),
+            get_demo_evidence_link_repository(),
+            get_demo_finance_audit_event_repository(),
         )
     try:
         client = get_firestore_client()
@@ -156,13 +155,14 @@ def _get_repositories(settings=None):
         )
     except Exception:
         return (
-            _demo_settlement_repo,
-            _demo_deduction_repo,
-            _demo_verification_repo,
-            _demo_decision_repo,
-            _demo_evidence_repo,
-            _demo_audit_repo,
+            get_demo_settlement_repository(),
+            get_demo_settlement_deduction_repository(),
+            get_demo_verification_result_repository(),
+            get_demo_settlement_decision_repository(),
+            get_demo_evidence_link_repository(),
+            get_demo_finance_audit_event_repository(),
         )
+
 
 
 def get_settlement_service(settings=Depends(get_settings)) -> SettlementService:
@@ -451,26 +451,33 @@ class ProcessSettlementDocumentResponse(BaseModel):
 
 def get_processing_pipeline(
     identity: AuthenticatedIdentity = Depends(get_authenticated_identity),
-    client = Depends(get_firestore_client),
-    document_repo = Depends(get_document_repository),
+    settings=Depends(get_settings),
+    document_repo=Depends(get_document_repository),
 ) -> SettlementProcessingPipeline:
-    """Dependency to create processing pipeline"""
-    from formwise_api.config import Settings
+    """Dependency to create processing pipeline.
+
+    Uses the same demo-aware `_get_repositories(settings)` resolution as the
+    rest of this router so that `/process-document` and `/{settlement_id}/details`
+    work in pure demo mode (no Firestore credentials configured), falling back
+    to Firestore-backed repositories otherwise.
+    """
     from formwise_api.ai_provider.factory import get_ai_provider
 
+    s_repo, d_repo, v_repo, dec_repo, e_repo, a_repo = _get_repositories(settings)
+
     try:
-        ai_provider = get_ai_provider(Settings())
+        ai_provider = get_ai_provider(settings)
     except Exception:
         ai_provider = None
 
     return SettlementProcessingPipeline(
         document_repo=document_repo,
-        settlement_repo=FirestoreSettlementRepository(client),
-        deduction_repo=FirestoreSettlementDeductionRepository(client),
-        verification_repo=FirestoreVerificationResultRepository(client),
-        decision_repo=FirestoreSettlementDecisionRepository(client),
-        evidence_repo=FirestoreEvidenceLinkRepository(client),
-        audit_repo=FirestoreFinanceAuditEventRepository(client),
+        settlement_repo=s_repo,
+        deduction_repo=d_repo,
+        verification_repo=v_repo,
+        decision_repo=dec_repo,
+        evidence_repo=e_repo,
+        audit_repo=a_repo,
         ai_provider=ai_provider,
     )
 
