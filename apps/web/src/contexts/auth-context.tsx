@@ -52,11 +52,10 @@ function getOrCreateDemoUid(): string {
   if (typeof window === 'undefined') return 'demo-user';
   const existing = window.localStorage.getItem(DEMO_UID_STORAGE_KEY);
   if (existing) return existing;
-  const generated = `demo-${
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : Date.now().toString(36)
-  }`;
+  const generated = `demo-${typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : Date.now().toString(36)
+    }`;
   window.localStorage.setItem(DEMO_UID_STORAGE_KEY, generated);
   return generated;
 }
@@ -76,8 +75,8 @@ function createDemoPrincipal(uid: string): AuthPrincipal {
 export function AuthProvider({ children }: Readonly<{ children: React.ReactNode }>) {
   const firebaseConfigError = useMemo(() => getFirebaseConfigurationError(), []);
   const authMode: AuthMode = useMemo(() => {
-    if (firebaseConfigError === null) return 'firebase';
     if (demoAuthEnabled) return 'demo';
+    if (firebaseConfigError === null) return 'firebase';
     return 'unconfigured';
   }, [firebaseConfigError]);
 
