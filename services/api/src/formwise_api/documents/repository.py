@@ -11,6 +11,7 @@ class DocumentRepository(Protocol):
     def list_for_owner(self, owner_uid: str, limit: int) -> list[DocumentResponse]: ...
     def start_ocr(self, document_id: str, owner_uid: str, provider: str) -> DocumentResponse | None: ...
     def update_privacy(self, document_id: str, owner_uid: str, updates: dict[str, Any]) -> DocumentResponse | None: ...
+    def update_fields(self, document_id: str, owner_uid: str, updates: dict[str, Any]) -> DocumentResponse | None: ...
 
 
 class FirestoreDocumentRepository:
@@ -75,6 +76,29 @@ class FirestoreDocumentRepository:
         data.update(updates)
         return self._to_model(data)
 
+    def update_fields(self, document_id: str, owner_uid: str, updates: dict[str, Any]) -> DocumentResponse | None:
+        """Update arbitrary DocumentResponse fields, keyed by model attribute name (not alias).
+
+        Used by the OCR pipeline to record genuine OCR outcomes (status, confidence,
+        text length, storage keys) without callers needing to know Firestore's
+        camelCase field names.
+        """
+        reference = self._client.collection("documents").document(document_id)
+        snapshot = reference.get()
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        if data.get("ownerUid") != owner_uid:
+            return None
+        firestore_updates: dict[str, Any] = {}
+        for field_name, value in updates.items():
+            field_info = DocumentResponse.model_fields.get(field_name)
+            alias = field_info.alias if field_info and field_info.alias else field_name
+            firestore_updates[alias] = value
+        reference.update(firestore_updates)
+        data.update(firestore_updates)
+        return self._to_model(data)
+
     def _to_model(self, data: dict[str, Any]) -> DocumentResponse:
         uploaded_at = data.get("uploadedAt")
         if not isinstance(uploaded_at, datetime):
@@ -115,6 +139,19 @@ class InMemoryDocumentRepository:
         return updated
 
     def update_privacy(self, document_id: str, owner_uid: str, updates: dict[str, Any]) -> DocumentResponse | None:
+        doc = self._documents.get(document_id)
+        if not doc or doc.owner_uid != owner_uid:
+            return None
+        updated = doc.model_copy(update=updates)
+        self._documents[document_id] = updated
+        return updated
+
+    def update_fields(self, document_id: str, owner_uid: str, updates: dict[str, Any]) -> DocumentResponse | None:
+        """Update arbitrary DocumentResponse fields, keyed by model attribute name.
+
+        Used by the OCR pipeline to record genuine OCR outcomes (status, confidence,
+        text length, storage keys).
+        """
         doc = self._documents.get(document_id)
         if not doc or doc.owner_uid != owner_uid:
             return None
