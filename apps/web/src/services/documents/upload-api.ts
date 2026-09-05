@@ -15,12 +15,12 @@ export interface DocumentRecord {
   ocrConfidence: number | null;
   textLength: number | null;
   privacyStatus:
-    | 'not_started'
-    | 'awaiting_consent'
-    | 'completed'
-    | 'blocked'
-    | 'cancelled'
-    | 'failed';
+  | 'not_started'
+  | 'awaiting_consent'
+  | 'completed'
+  | 'blocked'
+  | 'cancelled'
+  | 'failed';
   privacyCompletedAt: string | null;
   privacyPolicyVersion: string | null;
   piiCategories: string[];
@@ -92,7 +92,11 @@ function headers(idToken: string): HeadersInit {
 async function ensureResponse(response: Response): Promise<void> {
   if (response.ok) return;
   const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-  throw new Error(payload?.detail ?? 'The document request could not be completed.');
+  const message = payload?.detail ?? 'The document request could not be completed.';
+  // Include the exact failing request so a 404/403/etc can be pinpointed
+  // immediately instead of guessing which of several sequential calls
+  // (upload-intents / signed PUT / complete) failed.
+  throw new Error(`[${response.status}] ${response.url} — ${message}`);
 }
 
 export async function createUploadIntent(file: File, idToken: string): Promise<UploadIntent> {
