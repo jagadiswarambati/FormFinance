@@ -4,8 +4,6 @@
 
 **Razorpay AI Buildathon 2026 — Track 04: AI Finance Controller**
 
-**Evaluation Note:** The repository contains the complete implemented workflow, architecture, documentation, and benchmark. Due to submission-time constraints, the video may provide only a partial demonstration. The repository should be treated as the primary source of truth for the implementation.
-
 ---
 
 ## Table of Contents
@@ -968,7 +966,7 @@ Display results: deductions, verification, decision, audit trail
 ## Repository Structure
 
 ```
-FormFinance-main/
+FormFinance/
 ├── README.md                          # This file
 ├── docker-compose.yml                 # Service orchestration
 ├── pyproject.toml                     # Python workspace config
@@ -1096,8 +1094,8 @@ docker-compose --version  # Should be 2.0+
 #### Quick Start
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-org/FormFinance-main.git
-cd FormFinance-main
+git clone https://github.com/jagadiswarambati/FormFinance.git
+cd FormFinance
 
 # 2. Copy environment template
 cp .env.example .env
@@ -1286,7 +1284,7 @@ No credentials needed.
 
 #### Step 1: Start Application (1 minute)
 ```bash
-cd /path/to/FormFinance-main
+cd /path/to/FormFinance
 docker-compose up -d
 sleep 10
 curl -s http://localhost:8000/api/v1/health | jq .
@@ -1874,8 +1872,8 @@ This project is provided as-is for the Razorpay AI Buildathon 2026. See LICENSE 
 
 ```bash
 # 1. Clone & enter directory
-git clone https://github.com/your-org/FormFinance-main.git
-cd FormFinance-main
+git clone https://github.com/your-org/FormFinance.git
+cd FormFinance
 
 # 2. Copy environment config
 cp .env.example .env
