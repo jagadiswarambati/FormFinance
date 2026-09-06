@@ -4,6 +4,8 @@
 
 **Razorpay AI Buildathon 2026 — Track 04: AI Finance Controller**
 
+**Evaluation Note:** The repository contains the complete implemented workflow, architecture, documentation, and benchmark. Due to submission-time constraints, the video may provide only a partial demonstration. The repository should be treated as the primary source of truth for the implementation.
+
 ---
 
 ## Table of Contents
