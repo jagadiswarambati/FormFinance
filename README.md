@@ -1,275 +1,553 @@
-# FormFinance — AI Finance Controller for Settlement Reconciliation
+Update the existing README.md of the FormFinance repository to a professional, production-quality README suitable for the Razorpay AI Buildathon 2026 submission.
 
-**Razorpay AI Buildathon 2026 — Track 04: AI Finance Controller**
+IMPORTANT:
+- First inspect the existing README.md and repository structure.
+- Do NOT invent features that do not exist in the code.
+- Preserve technically accurate details from the existing implementation.
+- The README should describe the CURRENT working project, not future plans.
+- Do not rewrite application code.
+- Only modify README.md unless a tiny documentation-related correction is absolutely necessary.
+- Make the README polished enough that a hackathon judge, engineer, or recruiter can understand the project in 2–3 minutes.
 
-FormFinance turns a raw settlement PDF into a defensible, auditable decision
-(`APPROVED` / `FLAGGED` / `ESCALATED` / `FAILED`) with no human step in
-between — real OCR, real deterministic verification, real evidence
-matching, and a real AI agent for the cases that deterministic rules alone
-can't resolve.
+==================================================
+PROJECT
+==================================================
 
----
+Name:
+FormFinance
 
-## 1. Problem
+Position it as:
 
-Finance teams reconciling payment-gateway settlements today do it largely
-by hand: open the settlement PDF, open the fee schedule, open the evidence
-documents, manually check whether every deduction matches something
-documented, and decide whether to approve, dispute, or escalate. This is
-slow, inconsistent between reviewers, and produces no reusable audit trail
-of *why* a settlement was approved or flagged.
+AI Finance Controller for automated settlement verification, reconciliation, evidence matching, exception investigation, and auditable financial decisions.
 
-## 2. Solution
+Built for:
+Razorpay AI Buildathon 2026
+Track 04 — AI Finance Controller
 
-FormFinance automates that reconciliation loop end-to-end:
+==================================================
+CORE PROBLEM
+==================================================
 
-```
-Settlement PDF
-   → Upload (existing FormWise document infrastructure)
-   → PaddleOCR
-   → Settlement & deduction extraction
-   → Deterministic verification against the settlement's own numbers
-   → Evidence matching against supporting documents (OCR'd the same way)
-   → AI finance agent investigates only the cases deterministic rules
-     couldn't resolve
-   → Final decision: APPROVED / FLAGGED / ESCALATED / FAILED
-   → Immutable audit trail (FinanceAuditEvent records)
-   → Batch metrics across a settlement run
-   → Frontend: upload, live status, decision, evidence, audit trail
-```
+Explain the real finance-operations problem:
 
-Every decision is explainable: it's backed by the deterministic checks that
-ran, the evidence that was or wasn't found, and — where used — the AI
-agent's own reasoning, all recorded as audit events rather than produced
-and thrown away.
+Settlement reports contain payments, refunds, platform fees, taxes, adjustments, and net settlement amounts.
 
-## 3. Razorpay Track 04 alignment
+Traditional reconciliation requires finance teams to:
+- extract information from settlement documents
+- verify amounts and deductions
+- match deductions against evidence
+- investigate discrepancies
+- decide whether a settlement can be approved
+- escalate unresolved cases
+- maintain an audit trail
 
-Track 04 (AI Finance Controller) asks for an agentic system that can take
-over a finance-operations task that currently requires a human in the
-loop and produce a decision a finance team can trust. FormFinance targets
-**settlement reconciliation** specifically: it doesn't just extract text
-from a PDF, it closes the loop — deterministic verification first (cheap,
-explainable, no hallucination risk), and an AI agent second, invoked only
-for the residual cases that genuinely need judgment. That ordering (rules
-before AI, AI as an escalation path rather than the primary decision-maker)
-is deliberate: it keeps the system's most common outcomes fully explainable
-and reserves the AI agent's non-determinism for the minority of cases where
-it earns its keep.
+At scale, this becomes repetitive, slow, and difficult to audit.
 
-## 4. Architecture
+FormFinance addresses this by turning settlement reconciliation into an automated finance-control workflow.
 
-```
-apps/web/                   Next.js 15 frontend (App Router)
-services/api/                FastAPI backend — documents, OCR jobs, settlements,
-                              batch processing, audit, privacy
-services/worker/              Background worker — polls the OCR job queue,
-                              runs PaddleOCR, writes results back to Firestore
-packages/document-core/       Shared document/privacy/rendering models
-                              (Python + TS), reused from the FormWise base
-infra/                        Deployment/infra notes
-docker-compose.yml             api + web + worker (+ optional ollama for the AI agent)
-```
+==================================================
+SOLUTION
+==================================================
 
-The frontend never talks to OCR or the AI provider directly — everything
-goes through the FastAPI backend, which owns Firestore, local document
-storage, the OCR job queue, and the settlement pipeline.
+Clearly explain the end-to-end workflow:
 
-## 5. End-to-end workflow
+Settlement PDF/document
+→ FormWise document upload
+→ OCR/PaddleOCR
+→ structured settlement extraction
+→ deterministic verification
+→ deduction verification
+→ evidence matching
+→ AI/agent investigation for unresolved cases
+→ APPROVE / FLAG / ESCALATE
+→ audit trail
+→ batch metrics
 
-1. **Upload** — the frontend requests a signed upload target
-   (`POST /documents/upload-intents`), PUTs the PDF bytes directly
-   (`PUT /documents/{id}/upload`), then confirms completion
-   (`POST /documents/{id}/complete`).
-2. **OCR** — the frontend enqueues an OCR job (`POST /documents/{id}/ocr`)
-   and polls status (`GET /documents/{id}/ocr`) while the **worker**
-   process picks the job off the Firestore queue and runs it through
-   **PaddleOCR** (`PPStructureV3`) — not a stub, not a placeholder.
-3. **Settlement extraction** — once OCR text is available, the pipeline
-   extracts settlement-level fields (gross/net amount, currency,
-   settlement date) and itemized deductions from the OCR'd text.
-4. **Deterministic verification** — each deduction is checked against the
-   settlement's own stated totals (does gross − deductions = net? do the
-   deduction line items reconcile?) with no AI involved at this stage.
-5. **Evidence matching** — supporting documents (fee schedules, dispute
-   letters, etc.) are OCR'd the same way and checked for whether they
-   substantiate the deductions found in the settlement.
-6. **AI fallback** — only for deductions the deterministic + evidence
-   steps couldn't resolve, a finance investigation agent is invoked to
-   reason over the remaining ambiguity. If no AI provider is configured
-   (e.g. Ollama isn't running), this step degrades gracefully to
-   "unresolved" rather than crashing or fabricating a resolution.
-7. **Decision** — `APPROVED`, `FLAGGED`, `ESCALATED`, or `FAILED`, derived
-   from the combination of the above, not from the AI agent alone.
-8. **Audit trail** — every stage writes a `FinanceAuditEvent`, giving a
-   replayable record of what happened and why.
-9. **Frontend result** — the settlement processor screen renders the real
-   API response: decision, deductions, evidence matches, and audit events.
+Emphasize:
 
-## 6. AI / agent role
+OCR is only the extraction layer.
 
-The AI agent (`SettlementFinanceAgent`) is deliberately **not** the primary
-decision-maker. It is invoked only when deterministic verification and
-evidence matching leave a deduction unresolved, and its output is one input
-to the final decision rather than the decision itself. The AI provider is
-pluggable (`services/api/src/formwise_api/ai_provider/`); the reference
-configuration uses **Ollama** running locally (`docker-compose.yml`, under
-the `ai` profile). If the provider is unreachable or unconfigured, the
-pipeline logs an audit event and falls back to a deterministic-only
-outcome — it never silently fabricates an AI opinion.
+The actual product value is the finance-control loop that uses extracted information, verification, evidence, investigation, and decision-making.
 
-## 7. OCR
+==================================================
+KEY CAPABILITIES
+==================================================
 
-OCR is real **PaddleOCR** (`PPStructureV3`), run inside the `worker`
-service (`services/worker/src/formwise_worker/ocr/paddle.py`), not a
-mock or manual transcription. The worker polls a Firestore-backed job
-queue (`services/worker/src/formwise_worker/queue.py`) — it is a
-separate long-running process and must be running for OCR to complete;
-`docker-compose.yml` starts it by default (no special profile required).
+Document Processing
+- Settlement document upload
+- Existing FormWise document infrastructure
+- OCR/PaddleOCR processing
 
-## 8. Verification / evidence matching
+Settlement Intelligence
+- Settlement metadata extraction
+- Gross amount
+- Refunds
+- Platform fees
+- Taxes
+- Adjustments
+- Net settlement
 
-- **Deterministic verification** (`settlements/deterministic_verifier.py`,
-  `settlements/verification_service.py`) checks the settlement's own
-  arithmetic and deduction structure with no AI involved — fast,
-  reproducible, and the first line of defense against bad decisions.
-- **Evidence matching** (`settlements/evidence_matcher.py`) checks
-  deductions against separately-uploaded, separately-OCR'd evidence
-  documents (fee schedules, correspondence, etc.), so a "the fee
-  schedule says X" claim isn't taken from the settlement PDF alone.
+Verification
+- Settlement verification
+- Deduction verification
+- Evidence matching
+- Verified / disputed / unverifiable outcomes
 
-## 9. Batch processing and metrics
+AI Finance Controller
+- Investigates unresolved cases
+- Uses available evidence/context
+- Produces a finance decision
+- Supports APPROVE / FLAG / ESCALATE outcomes
 
-`BatchSettlementProcessor` runs the full pipeline (extraction →
-verification → evidence → AI fallback → decision → audit) across a set of
-settlements and aggregates a `BatchMetrics` report: totals processed,
-approval/flag/escalation counts, deduction verification stats, evidence
-match rate, extraction success rate, exception rate, and AI agent
-investigation/success/failure counts. Two endpoints expose this:
+Auditability
+- Records processing and decision events
+- Makes the decision flow traceable
 
-- `GET /settlements/batch/demo-run` — runs the backend's built-in
-  synthetic demo dataset end-to-end through the real pipeline.
-- `POST /settlements/batch/process` — runs the same pipeline against
-  settlement specs supplied in the request body.
+Batch Processing
+- Synthetic 50-record benchmark/demo
+- Settlement outcome metrics
+- Extraction metrics
+- Deduction verification metrics
+- Evidence match rate
+- Exception rate
+- Agent investigation metrics
 
-The frontend's **Dashboard** and **Batch Results** pages call
-`GET /settlements/batch/demo-run` live and render whatever the pipeline
-actually produces — there are no hardcoded metric values in either page.
+==================================================
+ARCHITECTURE
+==================================================
 
-## 10. Demo authentication
+Include a clean Mermaid architecture diagram.
 
-The backend requires a Firebase ID token on every authenticated request
-(`services/api/src/formwise_api/dependencies/authentication.py`) by
-default. For demos and local development without a real Firebase
-project, an explicit, narrowly-scoped bypass exists:
+Use a diagram similar to:
 
-- Set `DEMO_AUTH_ENABLED=true` on the **backend** and
-  `NEXT_PUBLIC_DEMO_AUTH_ENABLED=true` on the **frontend** (baked in at
-  Next.js build time).
-- In this mode the frontend sends an `X-Demo-User-ID` header instead of a
-  Firebase bearer token; the backend accepts it **only** when
-  `DEMO_AUTH_ENABLED=true` **and** no real bearer token is present — a
-  real Firebase token always takes priority if one is sent.
-- `DEMO_AUTH_ENABLED=true` is **structurally rejected** if
-  `FORMWISE_ENV=production` (`Settings.validate_security_configuration`
-  raises on startup), so this path cannot accidentally ship live.
-- If real `NEXT_PUBLIC_FIREBASE_*` values are configured instead, the
-  frontend uses genuine Firebase `signInWithPopup` / `onAuthStateChanged`
-  and demo mode is not used.
+flowchart TD
+    A[Settlement PDF / Document] --> B[FormWise Document Upload]
+    B --> C[OCR / PaddleOCR]
+    C --> D[Settlement Extraction]
+    D --> E[Verification Engine]
+    E --> F[Evidence Matching]
+    F --> G[Finance Agent Investigation]
+    G --> H{Decision}
+    H -->|Verified| I[APPROVE]
+    H -->|Exception| J[FLAG]
+    H -->|Unresolved| K[ESCALATE]
+    I --> L[Audit Trail]
+    J --> L
+    K --> L
+    L --> M[Batch Metrics / Finance Dashboard]
 
-Everything downstream of authentication (documents, OCR jobs, settlements,
-audit events) is scoped by `identity.uid`, which works identically whether
-that uid came from a real Firebase token or the demo header — it's used
-purely as a Firestore partition key, never passed to `firebase_admin`
-itself.
+Only include components that actually correspond to the current implementation.
 
-## 11. Setup
+==================================================
+TECHNICAL ARCHITECTURE
+==================================================
 
-```bash
-git clone <this repository>
-cd FormFinance
+Inspect package files and source code and document the actual stack.
 
-# Create a .env at the repo root — none is committed, none should be.
-cat >> .env << 'EOF'
-DEMO_AUTH_ENABLED=true
-NEXT_PUBLIC_DEMO_AUTH_ENABLED=true
-EOF
-```
+Where supported by the repository, describe:
 
-If you have a real Firebase project instead, set
-`FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT_JSON` (backend) and
-`NEXT_PUBLIC_FIREBASE_*` (frontend) instead of the two lines above.
+Frontend:
+- Next.js
+- React
+- TypeScript
 
-## 12. Running locally
+Backend:
+- Python
+- FastAPI
 
-```bash
-docker compose up --build
-```
+OCR:
+- PaddleOCR / existing FormWise OCR pipeline
 
-This starts `api` (FastAPI, port 8000), `web` (Next.js, port 3000), and
-`worker` (PaddleOCR job processor) by default. Add
-`--profile ai` to also start `ollama` for the AI finance agent step —
-without it, the pipeline still runs and produces decisions, just without
-the AI-fallback step for unresolved deductions.
+Infrastructure:
+- Docker
+- Docker Compose
 
-Open `http://localhost:3000`, click **Login** or **Sign Up** (demo mode
-authenticates immediately, no Google account needed), go to
-**Settlements**, upload a settlement PDF, and watch it move through OCR,
-extraction, verification, evidence matching, and decisioning. Check
-**Dashboard** or **Batch Results** for a live run of the demo benchmark.
+Authentication:
+- Firebase authentication support
+- Demo authentication mode
 
-## 13. API endpoints (all under `/api/v1`, auth required unless noted)
+Do NOT claim technologies that are not actually present.
 
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/documents/upload-intents` | Request a signed upload target |
-| PUT | `/documents/{id}/upload` | Upload the raw file bytes |
-| POST | `/documents/{id}/complete` | Confirm upload completion |
-| GET | `/documents` | List the caller's documents |
-| POST | `/documents/{id}/ocr` | Enqueue an OCR job |
-| GET | `/documents/{id}/ocr` | Poll OCR status/result |
-| POST | `/settlements` | Create a settlement record |
-| GET | `/settlements/{id}` | Get a settlement |
-| GET | `/settlements` | List the caller's settlements |
-| POST | `/settlements/{id}/extract` | Extract deductions from OCR text |
-| POST | `/settlements/{id}/verify` | Run verification on a settlement |
-| POST | `/settlements/process-document` | Full pipeline: OCR'd document → decision |
-| GET | `/settlements/{id}/details` | Full settlement detail + audit events |
-| POST | `/settlements/batch/process` | Run the pipeline over supplied specs |
-| GET | `/settlements/batch/demo-run` | Run the pipeline over the built-in demo dataset |
-| GET | `/me` | Current authenticated identity |
-| GET | `/health` | Liveness (no auth) |
-| GET | `/ready` | Readiness, checks dependencies (no auth) |
+==================================================
+API
+==================================================
 
-## 14. Limitations / current demo dataset size
+Document the important existing endpoints.
 
-- The built-in demo/benchmark dataset
-  (`services/api/src/formwise_api/settlements/demo_data.py`) contains
-  **10** synthetic settlements, not 50 — this is the accurate current
-  size; treat any "50-record benchmark" reference elsewhere as aspirational
-  rather than what ships today.
-- `BatchMetricsResponse` reports the rates the batch processor computes
-  (`evidence_match_rate`, `exception_rate`, `extraction_success_rate`,
-  etc.) but does not itself re-derive or sanity-check them — they're only
-  as good as `BatchMetrics`'s own bookkeeping.
-- The AI agent step requires a running Ollama instance
-  (`docker compose --profile ai up`); without it the pipeline still
-  produces decisions, just without AI-assisted resolution of ambiguous
-  deductions.
-- Demo authentication (`DEMO_AUTH_ENABLED`) is explicitly a demo-only
-  mechanism, gated off in production by config validation — it is not a
-  general-purpose auth bypass.
-- Real Firebase sign-in is wired against the SDK but has not been
-  exercised against a live Firebase project during development of this
-  fix; if you configure real Firebase credentials, test the sign-in flow
-  before relying on it for a live demo.
+At minimum inspect and document the actual implementation of:
 
-## 15. Tech stack
+POST /api/v1/settlements/process-document
 
-- **Frontend:** Next.js 15 (App Router), React, TypeScript, Tailwind CSS
-- **Backend:** FastAPI, Pydantic v2, Firestore (via `firebase_admin`)
-- **OCR:** PaddleOCR (`PPStructureV3`)
-- **AI agent:** Ollama (pluggable provider interface)
-- **Worker:** Python, polling a Firestore-backed job queue
-- **Auth:** Firebase Authentication, with an explicit demo-mode bypass
-- **Infra:** Docker Compose (api / web / worker / optional ollama)
+GET /api/v1/settlements/batch/demo-run
+
+Also document the settlement/document endpoints that actually exist in the code.
+
+For each important endpoint give:
+- purpose
+- HTTP method
+- short description
+
+Do not invent request/response fields. Inspect the actual schemas before documenting them.
+
+==================================================
+DEMO WORKFLOW
+==================================================
+
+Add a "Demo Flow" section explaining exactly how someone can demonstrate the project:
+
+1. Start the application.
+2. Open the FormFinance frontend.
+3. Authenticate using supported demo mode if configured.
+4. Open settlement processing.
+5. Select/upload a settlement document.
+6. Run processing.
+7. Show extracted settlement data.
+8. Show verification.
+9. Show evidence matching.
+10. Show agent investigation when applicable.
+11. Show final APPROVE / FLAG / ESCALATE decision.
+12. Show audit events.
+13. Run/show the 50-record benchmark.
+
+Only describe steps that work in the current application.
+
+==================================================
+SYNTHETIC DEMO DATA
+==================================================
+
+Document that the project uses synthetic/demo financial data.
+
+Include an example settlement:
+
+Settlement ID:
+setl_TEST_20260905_001
+
+Merchant:
+Demo Commerce Pvt Ltd
+
+Settlement Date:
+05-Sep-2026
+
+UTR:
+FORMTESTUTR260905001
+
+Gross Payment Credits:
+225,000.00
+
+Refund:
+10,000.00
+
+Platform Fees:
+6,525.00
+
+Tax on Fees:
+1,174.50
+
+Adjustment:
+500.00
+
+Net Settlement:
+207,800.50
+
+3 payments
+1 refund
+1 adjustment
+
+Clearly state:
+
+"This is synthetic test data created for demonstration and does not represent a real Razorpay settlement."
+
+==================================================
+BATCH BENCHMARK
+==================================================
+
+Explain the 50-record synthetic benchmark.
+
+Document the actual metrics exposed by the implementation, including where applicable:
+
+- total settlements
+- extraction success
+- approved
+- flagged
+- escalated
+- failed
+- verified deductions
+- disputed deductions
+- unverifiable deductions
+- settlement approval rate
+- deduction verification rate
+- evidence match rate
+- exception rate
+- extraction success rate
+- agent investigations
+- agent investigation successes/failures
+
+IMPORTANT:
+Do not put fake percentages or fake benchmark results in the README.
+
+If actual benchmark numbers are available in the repository, document them accurately.
+Otherwise describe the metrics without inventing values.
+
+==================================================
+PROJECT STRUCTURE
+==================================================
+
+Inspect the repository and create a concise project structure section.
+
+Something like:
+
+apps/
+  web/
+services/
+  api/
+  worker/
+...
+
+But only include directories that actually exist.
+
+Briefly explain the responsibility of important directories.
+
+==================================================
+LOCAL DEVELOPMENT
+==================================================
+
+Create accurate setup instructions based on the repository.
+
+Include:
+
+Prerequisites
+- Node.js version if defined
+- Python version if defined
+- Docker Desktop if required
+- any other actual dependency
+
+Installation
+
+Environment configuration
+
+Demo authentication configuration
+
+Running locally
+
+Running with Docker Compose
+
+Building the frontend
+
+Running backend tests
+
+Running the benchmark
+
+Do NOT invent commands.
+
+Inspect:
+- package.json
+- workspace configuration
+- Dockerfiles
+- docker-compose.yml
+- pyproject.toml / requirements files
+- existing documentation
+before writing commands.
+
+==================================================
+ENVIRONMENT VARIABLES
+==================================================
+
+Create a clean environment variable section.
+
+Inspect .env.example and actual code.
+
+Document only safe variable names and descriptions.
+
+NEVER put:
+- API keys
+- Firebase secrets
+- credentials
+- tokens
+- private keys
+- actual .env contents
+
+Explain that `.env` should not be committed.
+
+==================================================
+SECURITY / DEMO MODE
+==================================================
+
+Explain that the repository supports demo authentication for local/demo use.
+
+Make it clear that demo authentication is intended for demonstration/development and is not equivalent to production authentication.
+
+Do not expose secrets.
+
+==================================================
+DESIGN PRINCIPLES
+==================================================
+
+Add a concise section explaining the important design principles:
+
+1. Evidence-backed decisions
+2. Deterministic verification before agent reasoning
+3. Human-readable exceptions
+4. Auditable decisions
+5. Batch-level measurement
+6. Reuse of FormWise document/OCR infrastructure
+7. Production authentication path remains separate from demo mode
+
+Only claim these where supported by the code.
+
+==================================================
+WHY THIS FITS AI FINANCE CONTROLLER
+==================================================
+
+Add a strong section explaining why FormFinance fits Track 04.
+
+Focus on:
+
+- finance workflow automation
+- settlement reconciliation
+- exception detection
+- evidence-based verification
+- agent investigation
+- operational decisions
+- measurable batch performance
+- auditability
+
+Avoid generic statements like "AI makes finance better."
+
+Make the connection to the finance-operations loop explicit:
+
+DETECT
+→ VERIFY
+→ INVESTIGATE
+→ DECIDE
+→ RECORD
+
+==================================================
+LIMITATIONS / DEMO SCOPE
+==================================================
+
+Add an honest section.
+
+State that:
+- demo settlement data is synthetic
+- this is a buildathon prototype
+- benchmark data is synthetic
+- production deployment would require production-grade data integrations, authentication, authorization, observability, and operational controls where applicable
+
+Do not undersell the project, but do not claim production readiness that isn't implemented.
+
+==================================================
+ROADMAP
+==================================================
+
+Only include a small "Future Enhancements" section.
+
+Do NOT make it look like missing core functionality.
+
+Possible future work should be clearly labeled as future and should not be presented as already implemented.
+
+==================================================
+SCREENSHOTS
+==================================================
+
+If the repository already contains screenshots/assets, inspect them and reference them appropriately.
+
+If there are no screenshots, do not invent image paths.
+
+Leave a clean placeholder section only if useful.
+
+==================================================
+README STYLE
+==================================================
+
+Use professional GitHub README formatting.
+
+Recommended structure:
+
+# FormFinance
+
+Short one-line description.
+
+Badges only if they can be verified.
+
+> Problem statement
+
+## Overview
+
+## Why FormFinance
+
+## How It Works
+
+## Architecture
+
+## Key Capabilities
+
+## AI Finance Controller
+
+## Verification & Evidence
+
+## Decisions
+
+## Auditability
+
+## 50-Record Benchmark
+
+## API
+
+## Tech Stack
+
+## Project Structure
+
+## Getting Started
+
+## Environment Configuration
+
+## Demo Workflow
+
+## Synthetic Demo Data
+
+## Design Principles
+
+## Track 04 Alignment
+
+## Limitations & Demo Scope
+
+## Future Enhancements
+
+## License
+
+Only include License if an actual license exists in the repository. Do not invent one.
+
+==================================================
+QUALITY BAR
+==================================================
+
+The final README should feel like:
+
+- serious engineering project
+- finance/fintech product
+- AI-agent system
+- hackathon submission
+- understandable by judges
+- understandable by developers
+- technically honest
+
+Avoid:
+- excessive emojis
+- marketing fluff
+- fake metrics
+- fake integrations
+- unsupported claims
+- giant walls of text
+- vague "AI-powered" statements
+- saying something is implemented when it is only planned
+
+Use diagrams, tables, concise bullets, and code blocks where useful.
+
+Before finishing:
+1. Inspect the repository.
+2. Rewrite README.md.
+3. Check every technical claim against the actual code/configuration.
+4. Make sure commands are valid.
+5. Make sure no secrets are included.
+6. Show me the final README.md content or a concise summary of what you changed.
+7. Do not modify application functionality.
